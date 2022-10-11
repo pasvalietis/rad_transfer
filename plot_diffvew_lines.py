@@ -34,6 +34,7 @@ import mhdpost_func
 # ChiantiPy
 import ChiantiPy.core as ch
 
+
 # Astropy
 from astropy import units as u
 from astropy import constants as const
@@ -214,15 +215,25 @@ def fcun_doppler_width(wv_arr, doppler_arr, I_nu):
 # Fe XXIV (192.04 A; sensitive to ~17 MK plasma -- used by Ryan's paper with Hinode/EIS)
 # and/or Fe XXI (1354.08 A; sensitive to ~10 MK plasma -- measured by IRIS)
 t = 10.**(6.0 + 0.01*np.arange(151.))
-fe21 = ch.ion('fe_21', temperature=t, eDensity=1.e+9, em=1.e+27)
-fe24 = ch.ion('fe_24', temperature=t, eDensity=1.e+9, em=1.e+27)
-fe21.gofnt(wvlRange=[1354., 1355.0],top=3, plot=False)
-fe24.gofnt(wvlRange=[192., 192.2],top=3, plot=False)
+#%%
+#fe21 = ch.ion('fe_21', temperature=t, eDensity=1.e+9, em=1.e+27)
+#fe24 = ch.ion('fe_24', temperature=t, eDensity=1.e+9, em=1.e+27)
+#%%
+#fe21.gofnt(wvlRange=[1354., 1355.0],top=3, plot=False)
+#%%
+#fe24.gofnt(wvlRange=[192., 192.2],top=3, plot=False)
 #%%
 # restore from the saved pickle files running the above commands
 #[fe21, fe24] = pickle.load(open("./data_chianti_fe/fe21_24.p", "rb"))
-
-
+#%%
+'''
+f = open('fe21_24.p', 'wb') # Pickle file is newly created where foo1.py is
+pickle.dump([fe21, fe24], f) # dump data to f
+f.close()
+'''
+#%%
+[fe21n, fe24n] = pickle.load(open("./data_chianti_fe/fe21_24.p", "rb"))
+#%%
 # ------------------------------------------------------------------------------
 # 0.1 Initialize parameters
 # ------------------------------------------------------------------------------
@@ -232,8 +243,10 @@ yc_chosen = 0.48
 # ------------------------------------------------------------------------------
 # 1. Read 3D vtk data
 # ------------------------------------------------------------------------------
+#%%
 vtkfile = './datacubes/' + filename
 var = athena_vtk_reader.read(vtkfile, outtype='cons', nscalars=0)
+#%%
 x = var['x']
 y = var['y']
 z = var['z']
@@ -252,7 +265,7 @@ p3 = (var['e'] - ek - eb)*(gamma - 1.0)
 te3 = p3/rho3
 del ek, eb, p3, bx3, by3, bz3
 gc.collect()
-
+#%%
 #
 # 1.1
 #
@@ -265,7 +278,7 @@ time_char = 109.8 #(s)
 # set scaled temperature and velocity
 te_scale_list = np.array([0.8, 1.0, 1.2])
 
-
+#%%
 # -----------------------------------
 # 2. Plot lines with different te_scales
 # -----------------------------------
@@ -353,6 +366,7 @@ for isample in range(4):
     plt.subplots_adjust(wspace=0.25, hspace=0.25, left=0.1, right=0.9, top=0.95, bottom=0.05)
     plt.savefig('./fig_1los_'+str_sample[isample]+'_time{0:.2f}.pdf'.format(time), dpi=300)
 
+#%%
 # -------------------------------
 #  3. Scan at different z for LOS x-
 # -------------------------------

@@ -26,7 +26,7 @@ def read(filename, outtype='prim', nscalars=0):
     :param filename: the vtk file name with full-path
     :param nscalars: the number of passive scalars. The defaut is 0.
     :param outtype: prim or cons
-    :return: returen all variables: rho, p, bx, by, bz, vx, vy, vz, scalar, x, y, z, and time.
+    :return: return all variables: rho, p, bx, by, bz, vx, vy, vz, scalar, x, y, z, and time.
     """
     reader = vtkStructuredPointsReader()
     # Get all data
@@ -108,6 +108,7 @@ def read(filename, outtype='prim', nscalars=0):
         scalar = []
         if nscalars >= 1:
             for iscalar in range(nscalars):
+                print('iscalar#',iscalar,' of ', nscalars)
                 scalar_str = "specific_scalar[{:d}]".format(iscalar)
                 vartemp = vn.vtk_to_numpy(data.GetCellData().GetArray(scalar_str))
                 s = vartemp.reshape(nz, ny, nx)
@@ -137,6 +138,7 @@ def read(filename, outtype='prim', nscalars=0):
         if nscalars >= 1:
             # scalar = np.ndarray(shape=(nscalars, nz, ny, nx), dtype=np.double, order='C')
             for iscalar in range(nscalars):
+                print('*iscalar#', iscalar, ' of ', nscalars)
                 #scalar_str = "specific_scalar[{:d}]".format(iscalar)
                 scalar_str = "scalar[{:d}]".format(iscalar)
                 # print(scalar_str)
