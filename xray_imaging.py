@@ -1,6 +1,6 @@
 import yt
 #yt.toggle_interactivity()
-yt.enable_parallelism() # run in console as  mpirun -n 6 python3 xray_imaging.py
+#yt.enable_parallelism() # run in console as  mpirun -n 6 python3 xray_imaging.py
 import pyxsim
 #import soxs
 units_override = {
@@ -15,12 +15,14 @@ units_override = {
 ds = yt.load("datacubes/flarecs-id.0035.vtk", units_override=units_override, default_species_fields='ionized')
 ds.field_list
 print("done")
-#%%
+# #%%
+
 #source_model = pyxsim.CIESourceModel("apec")#, emin, emax, nbins, Zmet)
 #thermal_model = pyxsim.CIESourceModel("apec", 0.1, 11.0, 10000, 0.3)
 thermal_model = pyxsim.CIESourceModel("apec", 0.025, 64.0, 100, 0.3, binscale='log')
 #%%
 slc = yt.SlicePlot(ds, 'z', [('athena', 'density'), ('athena', 'total_energy')], width=(0.75, 1))
+#%%
 slc.save()
 #%%
 #source_model = pyxsim.CIESourceModel("spex", 0.05, 11.0, 1000, 0.3, binscale='log')

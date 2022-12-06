@@ -1,4 +1,5 @@
 import yt
+yt.enable_parallelism()
 #yt.toggle_interactivity()
 #yt.enable_parallelism()
 import pyxsim
@@ -9,8 +10,8 @@ ds = yt.load("GasSloshing/sloshing_nomag2_hdf5_plt_cnt_0150",
              default_species_fields="ionized")
 
 #%%
-slc = yt.SlicePlot(ds, "z", [("gas","density"), ("gas","temperature")], width=(1.0,"Mpc"))
-slc.show()
+slc = yt.SlicePlot(ds, "z", [("gas", "density"), ("gas", "temperature")], width=(1.0,"Mpc"))
+#slc.show()
 slc.save()
 
 sp = ds.sphere("c", (500.,"kpc"))
@@ -24,7 +25,7 @@ print(sp["gas","xray_luminosity_0.5_7.0_keV"])
 print(sp.sum(("gas","xray_luminosity_0.5_7.0_keV")))
 #%%
 prj = yt.ProjectionPlot(ds, "z", ("gas", "xray_emissivity_0.5_7.0_keV"), width=(1.0,"Mpc"))
-prj.show()
+#prj.show()
 #%%
 prj.save()
 #%%
@@ -46,7 +47,7 @@ soxs.instrument_simulator("sloshing_simput.fits", "evt.fits", (100.0, "ks"),
 
 #%%
 soxs.write_image("evt.fits", "img.fits", emin=0.5, emax=2.0, overwrite=True)
-soxs.plot_image("img.fits", stretch='sqrt', cmap='arbre', vmin=0.0, vmax=10.0, width=0.2)
+#soxs.plot_image("img.fits", stretch='sqrt', cmap='arbre', vmin=0.0, vmax=10.0, width=0.2)
 soxs.save()
 
 
