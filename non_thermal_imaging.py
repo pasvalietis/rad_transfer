@@ -47,6 +47,32 @@ dist_fac, redshift = plaw_model._make_dist_fac(ds, redshift=0.0, dist=None, cosm
 emin_src = emin * (1.0 + redshift)
 emax_src = emax * (1.0 + redshift)
 
+ei_name = (ftype, f"xray_intensity_{emin.value}_{emax.value}_keV")
+ei_dname = rf"I_{{X}} ({emin.value}-{emax.value} keV)"
+
+#%%
+eif = plaw_model.make_fluxf(emin_src, emax_src, energy=True)
+
+def _intensity_field(field, data):
+    ret = data.ds.arr(
+        plaw_model.process_data("energy_field", data, spectral_norm, fluxf=eif),
+        "keV/s",
+    )
+    idV = data[ftype, "density"] / data[ftype, "mass"]
+    I = dist_fac * ret * idV
+    return I.in_units("erg/cm**3/s/arcsec**2")
+#%%
+ds.add_field(
+            ei_name,
+            function=_intensity_field,
+            display_name=ei_dname,
+            sampling_type="local",
+            units="erg/cm**3/s/arcsec**2",
+            force_override=True,
+        )
+
+
+#%%
 #
 # #%%
 # plaw_model = pyxsim.PowerLawSourceModel(1.0, 1, 80.0, "power_law_emission", 1.0)
