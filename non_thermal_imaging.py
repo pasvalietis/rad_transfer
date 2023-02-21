@@ -1,6 +1,6 @@
-import matplotlib
+#import matplotlib
 
-matplotlib.rc("font", size=18, family="serif")
+#matplotlib.rc("font", size=18, family="serif")
 import yt
 yt.enable_parallelism()
 import numpy as np
@@ -10,14 +10,16 @@ import pyxsim
 
 ds = yt.load(
     "datasets/ShockCloud/id1/Cloud-id1.0050.vtk", default_species_fields="ionized"
+    #"datacubes/flarecs-id.0035.vtk", default_species_fields="ionized"
 )
 slc = yt.SlicePlot(
     ds, "z", [("gas", "density"), ("gas", "temperature")], width=(0.05, "m")
 )
 slc.save()
 
+alpha = 5./3.
 #%%
-plaw_model = pyxsim.PowerLawSourceModel(3.0, 5.0, 80.0, "power_law_emission", 2.5)
+plaw_model = pyxsim.PowerLawSourceModel(3.0, 5.0, 80.0, "power_law_emission", alpha)
 # A = yt.YTQuantity(500.0, "cm**2")
 # exp_time = yt.YTQuantity(1.0e5, "s")
 # redshift = 0.03
@@ -48,7 +50,7 @@ emax = parse_value(emax, "keV")
 emin_src = emin * (1.0)
 emax_src = emax * (1.0)
 
-xray_fields = plaw_model.make_intensity_fields(ds, emin, emax, dist=(0.2, "m"))
+xray_fields = plaw_model.make_intensity_fields(ds, emin, emax, dist=(0.09, "m"))
 
 #print(xray_fields)
 #%%
@@ -98,7 +100,7 @@ print(plaw_model.emission_field)
 # Access the corresponding created field
 print(ds.all_data()[('gas', 'power_law_emission')])
 num_cells = len(ds.all_data()[('gas', 'power_law_emission')])
-alpha = 2.0
+#alpha = 2.0
 if isinstance(alpha, float):
     alpha = alpha * np.ones(num_cells)
 else:
@@ -161,14 +163,16 @@ if mode in ["photons", "photon_field"]:
 
     active_cells = number_of_photons > 0
     ncells = active_cells.sum()
+
 '''
 To plot a histogram for the power-law spectrum
 '''
 #%%
-bins = 10**(np.linspace(-1.,3.,70))
+bins = 10**(np.linspace(-1.,3.,90))
 plt.xscale('log')
 plt.xlabel('energy')
 plt.ylabel('photon flux')
+#plt.plot(energies[start_e:end_e], energies[start_e:end_e]**(-2.))
 count, bins, ignored = plt.hist(energies[start_e:end_e], bins=bins, density=True, log=True)
 plt.show()
 #%%
