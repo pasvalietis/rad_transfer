@@ -45,7 +45,7 @@ slc.save()
 emin = 0.025
 emax = 64.0
 
-thermal_model = pyxsim.CIESourceModel(model="apec",
+thermal_model = pyxsim.CIESourceModel(model='apec',
                                       emin=emin,
                                       emax=emax,
                                       nbins=100,
@@ -64,6 +64,85 @@ slc = yt.SlicePlot(
 )
 slc.save()
 
+#%%
+from more_itertools import chunked
+
+data = ds.all_data()
+model='apec',
+emin=emin,
+emax=emax,
+nbins=100,
+Zmet=0.3,
+binscale='log'
+kT_min=0.025,
+kT_max=64.0
+
+#%%
+from pyxsim.spectral_models import TableCIEModel
+#INIT DEFAULTS
+var_elem=None
+thermal_broad=True
+model_root=None
+model_vers=None
+nolines=False
+abund_table="angr"
+prng = None
+_nei = False
+var_elem_keys = list(var_elem.keys()) if var_elem else None
+#if model in ["apec", "spex"]:
+spectral_model = TableCIEModel(
+                model,
+                emin,
+                emax,
+                nbins,
+                kT_min,
+                kT_max,
+                binscale=binscale,
+                var_elem=var_elem_keys,
+                thermal_broad=thermal_broad,
+                model_root=model_root,
+                model_vers=model_vers,
+                nolines=nolines,
+                nei=_nei,
+                abund_table=abund_table,
+            )
+#%%
+orig_shape = data[('gas', 'temperature')].shape
+
+if len(orig_shape) == 0:
+    orig_ncells = 0
+else:
+    orig_ncells = np.prod(orig_shape)
+
+ret = np.zeros(orig_ncells)
+cut = True
+
+kT = np.ravel(data[('gas', 'temperature')].to_value("keV", "thermal"))
+cut &= (kT >= kT_min) & (kT <= kT_max)
+
+#cell_nrm = np.ravel(chunk[self.emission_measure_field].d * spectral_norm)
+num_cells = cut.sum()
+kT = kT[cut]
+
+num_photons_max = 10000000
+number_of_photons = np.zeros(num_cells, dtype="int64")
+energies = np.zeros(num_photons_max)
+
+start_e = 0
+end_e = 0
+
+idxs = np.where(cut)[0]
+
+for ck in chunked(range(num_cells), 100):
+
+    ibegin = ck[0]
+    iend = ck[-1] + 1
+    nck = iend - ibegin
+
+    #cnm = cell_nrm[ibegin:iend]
+
+    kTi = kT[ibegin:iend]
+    cspec, mspec, vspec = spectral_model.get_spectrum(kTi)
 
 #%%
 #thermal49_model = pyxsim.ThermalBremsstrahlung49(emin, emax, ('gas', 'temperature'))
