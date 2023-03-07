@@ -2,21 +2,31 @@
 
 #matplotlib.rc("font", size=18, family="serif")
 import yt
-yt.enable_parallelism()
+#yt.enable_parallelism()
 import numpy as np
 import matplotlib.pyplot as plt
 from yt.units import mp, keV, kpc
 import pyxsim
 
+# units_override = {
+#     "length_unit": (1.5e8, "m"),
+#     "time_unit": (109.8, "s"),
+#     "mass_unit": (8.43e38, "kg"),
+#     #"density_unit": (2.5e14, "kg/m**3"),
+#     "velocity_unit": (1.366e6, "m/s"),
+#     "temperature_unit": (1.13e8, "K"),
+# }
+
 ds = yt.load(
-    "datasets/ShockCloud/id1/Cloud-id1.0050.vtk", default_species_fields="ionized"
-    #"datacubes/flarecs-id.0035.vtk", default_species_fields="ionized"
+    #"datasets/ShockCloud/id1/Cloud-id1.0050.vtk", default_species_fields="ionized"
+    "datacubes/flarecs-id.0035_ss3.h5"#, default_species_fields="ionized"
 )
+#%%
 slc = yt.SlicePlot(
-    ds, "z", [("gas", "density"), ("gas", "temperature")], width=(0.05, "m")
+    ds, "z", [("gas", "density")], width=(0.01, "m")
 )
 slc.save()
-
+#%%
 alpha = 5./3.
 #%%
 plaw_model = pyxsim.PowerLawSourceModel(3.0, 5.0, 80.0, "power_law_emission", alpha)
@@ -24,7 +34,7 @@ plaw_model = pyxsim.PowerLawSourceModel(3.0, 5.0, 80.0, "power_law_emission", al
 # exp_time = yt.YTQuantity(1.0e5, "s")
 # redshift = 0.03
 # sp = ds.sphere("c", (0.5, "Mpc"))
-norm = yt.YTQuantity(1.0e-19, "photons/s/keV")
+norm = yt.YTQuantity(1.0, "photons/s/keV")
 
 def _power_law_emission(field, data):
     return norm * data["cell_mass"] / (1.0 * mp)
@@ -50,15 +60,22 @@ emax = parse_value(emax, "keV")
 emin_src = emin * (1.0)
 emax_src = emax * (1.0)
 
-xray_fields = plaw_model.make_intensity_fields(ds, emin, emax, dist=(0.09, "m"))
+xray_fields = plaw_model.make_intensity_fields(ds, emin, emax, dist=(0.045, "m"))
+
+
+#%%
+#tst = ds.all_data()
+#xr_test = plaw_model.make_intensity_fields(tst, emin, emax, dist=(0.09, "m"))
 
 #print(xray_fields)
 #%%
 # prj = yt.ProjectionPlot(
 #    ds, "z", ("gas", "xray_intensity_20.0_30.0_keV"), width=(0.5, "m")
 # )
+
+#%%
 slc = yt.SlicePlot(
-    ds, "z", ("gas", "xray_intensity_20.0_30.0_keV"), width=(0.05, "m")
+    ds, "z",  ('gas', 'xray_photon_intensity_20.0_30.0_keV'), width=(0.01, "m")
 )
 slc.save()
 
