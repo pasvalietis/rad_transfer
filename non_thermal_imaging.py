@@ -19,7 +19,8 @@ import pyxsim
 
 ds = yt.load(
     #"datasets/ShockCloud/id1/Cloud-id1.0050.vtk", default_species_fields="ionized"
-    "datacubes/flarecs-id.0035_ss3.h5"#, default_species_fields="ionized"
+    #"datacubes/flarecs-id.0035_ss3.h5"#, default_species_fields="ionized"
+    "datacubes/flarecs-id.0035.vtk", default_species_fields="ionized"
 )
 #%%
 slc = yt.SlicePlot(

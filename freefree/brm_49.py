@@ -1,5 +1,5 @@
 import numpy as np 
-from acgaunt import acgaunt
+from freefree.acgaunt import acgaunt
 
 
 def brem_49(kt, E):
