@@ -4,6 +4,10 @@ import numpy as np
 import pickle
 from pathlib import Path
 from yt.data_objects.static_output import Dataset
+
+from scipy.special import k0
+from astropy import constants as const
+from astropy import units as u
 #%%
 
 class ThermalBremsstrahlungModel:
@@ -34,12 +38,25 @@ class ThermalBremsstrahlungModel:
     #     return output
 
     def process_data(self, chunk):
-        norm = chunk[self.emission_field].d
+
+        pc = ds.units.physical_constants
+
+        kboltz = 1.3807e-16  # Boltzmann's constant
+
+        photon_energy = 6. * u.keV
+        photon_energy_erg = photon_energy.to(u.erg)
+        phot_field = photon_energy.to(u.erg).value * np.ones_like(chunk[self.emission_field].d)
         orig_shape = chunk[self.temperature_field].shape
         num_cells = len(chunk[self.emission_field])
         dens = chunk[self.density_field].d
         temp = chunk[self.temperature_field].d
-        em_data = dens**2.
+        # em_data = dens**2.
+        norm_energy = phot_field/(temp*kboltz)
+        em_data = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        em_data *= (np.sqrt(3.) / np.pi)
+
+        # brm_49 emission field
+        em_data = (1e8 / 9.26) * np.exp(-norm_energy) / E / np.sqrt(kt0)
         #print('num cells', num_cells)
         #ncells = 0
         print(len(em_data))
@@ -71,7 +88,7 @@ class ThermalBremsstrahlungModel:
 
 path_test = "datacubes/id0/Blast.0020.vtk"
 path_default = "datacubes/flarecs-id.0035.vtk"
-#path_subs = "datacubes/flarecs-id.0035_ss3.h5"
+# path_subs = "datacubes/flarecs-id.0035_ss3.h5"
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -101,27 +118,28 @@ def _temperature(field, data):
 #     with open(path_default_pickle, 'rb') as file:
 #         ds = pickle.load(file)
 # else:
+
 ds = yt.load(path_default, units_override=units_override, default_species_fields='ionized')
-    # with open(path_default_pickle, 'wb') as file:
-    #     pickle.dump(ds, file)  # dump data to f
+
+# with open(path_default_pickle, 'wb') as file:
+#     pickle.dump(ds, file)  # dump data to f
 
 
 #%%
 thermal_model = ThermalBremsstrahlungModel("temperature", "density", "cell_mass")
 
-n_bins = 1000
-hist, bins = np.histogram(
-    ds.all_data()[('gas', 'temperature')],
-    bins=n_bins,
-)
-
 thermal_model.make_intensity_fields(ds)
-print(ds.all_data()['gas', 'xray_intensity_keV'])
+#print(ds.all_data()['gas', 'xray_intensity_keV'])
 
 '''
 To be described later
 '''
-
+# # Plot a histogram of a field phys. parameter
+# n_bins = 1000
+# hist, bins = np.histogram(
+#     ds.all_data()[('gas', 'temperature')],
+#     bins=n_bins,
+# )
 # def _emissivity_field(field, data):
 #     ret = data.ds.arr(
 #         self.process_data("emissivity_field", data, spectral_norm, fluxf=eif),
