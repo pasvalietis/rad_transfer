@@ -52,11 +52,16 @@ class ThermalBremsstrahlungModel:
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
         norm_energy = phot_field/(temp*kboltz)
-        em_data = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
-        em_data *= (np.sqrt(3.) / np.pi)
+        gaunt = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        gaunt *= (np.sqrt(3.) / np.pi)
 
         # brm_49 emission field
-        em_data = (1e8 / 9.26) * np.exp(-norm_energy) / E / np.sqrt(kt0)
+        #em_data = (1e8 / 9.26) * np.exp(-norm_energy) / phot_field / np.sqrt(temp)
+        # Aschwanden emissivity
+        factor = 5.44436678165399e-39
+        em_data = factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
+        em_data *= gaunt
+
         #print('num cells', num_cells)
         #ncells = 0
         print(len(em_data))
@@ -88,7 +93,8 @@ class ThermalBremsstrahlungModel:
 
 path_test = "datacubes/id0/Blast.0020.vtk"
 path_default = "datacubes/flarecs-id.0035.vtk"
-# path_subs = "datacubes/flarecs-id.0035_ss3.h5"
+path_subs = "datacubes/flarecs-id.0035_ss3.h5"
+path = path_subs
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -100,29 +106,57 @@ units_override = {
     "temperature_unit": (1.13e8, "K"),
 }
 
-# Add temperature field to a subsampled dataset // Talk about it to Sabastian 
-
+# Add temperature field to a subsampled dataset // Talk about it to Sabastian
+#%%
 def _temperature(field, data):
     pc = data.ds.units.physical_constants
     return (data.ds.mu * data["gas", "pressure"] / data["gas", "density"] * pc.mh / pc.kboltz).in_units("K")
-    
-# ds.add_field(
-# ("gas", "temperature"),
-# function=_temperature,
-# sampling_type="cell",
-# units="K",
-# )
 
-# path_default_pickle = path_default + ".pickle"
-# if Path(path_default_pickle).exists():
-#     with open(path_default_pickle, 'rb') as file:
-#         ds = pickle.load(file)
-# else:
+def _subs_density(field, data):
+    return (data["grid", "density"] * 229730894.015).in_units("g/cm**3")
 
-ds = yt.load(path_default, units_override=units_override, default_species_fields='ionized')
+def _subs_eint_from_etot(data):
+    return _subs_eint_from_etot(data) / data["gas", "dens"]
 
-# with open(path_default_pickle, 'wb') as file:
-#     pickle.dump(ds, file)  # dump data to f
+def _subs_specific_thermal_energy(field, data):
+    return _subs_eint_from_etot(data) / data["gas", "dens"]
+
+def _subs_pressure(field, data):
+    """M{(Gamma-1.0)*rho*E}"""
+    ftype = 'grid'
+    tr = ((5./3.) - 1.0) * (data[ftype, "dens"] * data[ftype, "specific_thermal_energy"])
+    return tr
+
+def _subs_temperature(field, data):
+    pc = data.ds.units.physical_constants
+    # norm = norm = 1. * u.dyn / u.cm**2
+    norm = yt.YTQuantity(1.0, '(cm**2*s)/g')
+    # mu = 0.5924489101195808
+    # return (mu * data["gas", "pressure"] / data["gas", "density"] * pc.mh / pc.kboltz).in_units("K")
+    return ((1./3.) * pc.mh * ((data['grid', 'momentum_x'].in_units('g/(cm**2*s)')/norm)**2 +
+                               (data['grid', 'momentum_y'].in_units('g/(cm**2*s)')/norm)**2 +
+                               (data['grid', 'momentum_z'].in_units('g/(cm**2*s)')/norm)**2
+                               ))
+
+#%%
+ds = yt.load(path, units_override=units_override, default_species_fields='ionized')
+
+
+#%%
+if path == path_subs:
+    ds.add_field(
+        ("gas", "dens"),
+        function=_subs_density,
+        sampling_type="cell",
+        units="g/cm**3",
+    )
+
+    ds.add_field(
+        ("gas", "temp"),
+        function=_subs_temperature,
+        sampling_type="cell",
+        units="g**5/(cm**8*s**4)",
+    )
 
 
 #%%
@@ -134,12 +168,34 @@ thermal_model.make_intensity_fields(ds)
 '''
 To be described later
 '''
-# # Plot a histogram of a field phys. parameter
-# n_bins = 1000
-# hist, bins = np.histogram(
-#     ds.all_data()[('gas', 'temperature')],
-#     bins=n_bins,
+# # Considering a downsampled dataset
+# u = ds.units
+# norm = 1. * u.dyn / u.cm**2
+# renorm = norm.to('code_pressure')
+# e0 = yt.YTQuantity(1.0, "K")
+#
+# def _temperature(field, data):
+#     return (
+#         e0 * data['grid', 'total_energy'] / renorm
+#     ).in_units("K")
+#
+# ds.add_field(
+#     ("gas", "temperature"),
+#     function=_temperature,
+#     sampling_type="cell",
+#     units="K",
 # )
+#%%
+# Plot a histogram of a field phys. parameter
+import matplotlib.pyplot as plt
+# n_bins = 1000
+bins = 10**(np.linspace(-32., 20., 500))
+count, bins, ignored = plt.hist(ds.all_data()[('gas', 'temp')], density=True, log=True, bins=bins)
+plt.xscale('log')
+plt.yscale('log')
+#plt.title('Number density')
+plt.show()
+   #%%
 # def _emissivity_field(field, data):
 #     ret = data.ds.arr(
 #         self.process_data("emissivity_field", data, spectral_norm, fluxf=eif),
