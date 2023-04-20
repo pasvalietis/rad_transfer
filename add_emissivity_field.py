@@ -52,8 +52,8 @@ class ThermalBremsstrahlungModel:
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
         norm_energy = phot_field/(temp*kboltz)
-        gaunt = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
-        gaunt *= (np.sqrt(3.) / np.pi)
+        gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        #gaunt *= (np.sqrt(3.) / np.pi)
 
         # brm_49 emission field
         #em_data = (1e8 / 9.26) * np.exp(-norm_energy) / phot_field / np.sqrt(temp)
@@ -129,14 +129,9 @@ def _subs_pressure(field, data):
 
 def _subs_temperature(field, data):
     pc = data.ds.units.physical_constants
-    # norm = norm = 1. * u.dyn / u.cm**2
-    norm = yt.YTQuantity(1.0, '(cm**2*s)/g')
-    # mu = 0.5924489101195808
-    # return (mu * data["gas", "pressure"] / data["gas", "density"] * pc.mh / pc.kboltz).in_units("K")
-    return ((1./3.) * pc.mh * ((data['grid', 'momentum_x'].in_units('g/(cm**2*s)')/norm)**2 +
-                               (data['grid', 'momentum_y'].in_units('g/(cm**2*s)')/norm)**2 +
-                               (data['grid', 'momentum_z'].in_units('g/(cm**2*s)')/norm)**2
-                               ))
+    renorm = 1e24
+    mu = 0.5924489101195808
+    return (mu * renorm * data['grid', 'total_energy'] / data["gas", "dens"] * pc.mh / pc.kboltz).in_units("K")
 
 #%%
 ds = yt.load(path, units_override=units_override, default_species_fields='ionized')
@@ -152,15 +147,32 @@ if path == path_subs:
     )
 
     ds.add_field(
-        ("gas", "temp"),
+        ("gas", "temperature"),
         function=_subs_temperature,
         sampling_type="cell",
-        units="g**5/(cm**8*s**4)",
+        units="K",
     )
 
 
 #%%
-thermal_model = ThermalBremsstrahlungModel("temperature", "density", "cell_mass")
+#%%
+# Plot a histogram of a field phys. parameter
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+# n_bins = 1000
+fname = 'temperature'
+bins = 10**(np.linspace(np.log10(ds.all_data()[('gas', fname)].min()/10.),
+            np.log10(ds.all_data()[('gas', fname)].max()*10.),
+            500))
+count, bins, ignored = plt.hist(ds.all_data()[('gas', fname)], density=True, log=True, bins=bins)
+plt.xlim(ds.all_data()[('gas', fname)].min()/10., ds.all_data()[('gas', fname)].max()*10.)
+plt.xscale('log')
+plt.yscale('log')
+#plt.title('Number density')
+plt.show()
+#plt.savefig('resampled_dens_dist.png')
+#%%
+thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "cell_mass")
 
 thermal_model.make_intensity_fields(ds)
 #print(ds.all_data()['gas', 'xray_intensity_keV'])
@@ -168,6 +180,41 @@ thermal_model.make_intensity_fields(ds)
 '''
 To be described later
 '''
+
+# Make a projection of intensity field
+
+
+N = 512
+norm_vec = [0.0, 0.0, 1.0]
+prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(ds,
+                        [0.0, 0.5, 0.0],  # center position in code units
+                        norm_vec,  # normal vector (z axis)
+                        1.0,  # width in code units
+                        N,  # image resolution
+                        'xray_intensity_keV',  # respective field that is being projected
+                        north_vector=[0.0, 1.0, 0.0]
+                        )
+
+Mm_len = 1 # ds.length_unit.to('Mm').value
+
+X, Y = np.mgrid[-0.5*150*Mm_len:0.5*150*Mm_len:complex(0, N),
+       0*Mm_len:150*Mm_len:complex(0, N)]
+
+fig, ax = plt.subplots()
+data_img = np.array(prji)
+imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
+
+pcm = ax.pcolor(X, Y, imag,
+                       #norm=colors.LogNorm(vmin=1e-1, vmax=imag.max()),
+                       cmap='inferno', shading='auto')
+int_units = str(prji.units)
+fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
+ax.set_xlabel('x, Mm')
+ax.set_ylabel('y, Mm')
+
+plt.show()
+plt.savefig('subs_imag_isometric.png')
+
 # # Considering a downsampled dataset
 # u = ds.units
 # norm = 1. * u.dyn / u.cm**2
@@ -185,16 +232,7 @@ To be described later
 #     sampling_type="cell",
 #     units="K",
 # )
-#%%
-# Plot a histogram of a field phys. parameter
-import matplotlib.pyplot as plt
-# n_bins = 1000
-bins = 10**(np.linspace(-32., 20., 500))
-count, bins, ignored = plt.hist(ds.all_data()[('gas', 'temp')], density=True, log=True, bins=bins)
-plt.xscale('log')
-plt.yscale('log')
-#plt.title('Number density')
-plt.show()
+
    #%%
 # def _emissivity_field(field, data):
 #     ret = data.ds.arr(
@@ -214,5 +252,6 @@ plt.show()
 #     force_override=force_override,
 # )
 # print(ds.all_data()['gas', 'xray_intensity_keV'])
+#ds.all_data()['gas', 'xray_intensity_keV']
 
 #%%
