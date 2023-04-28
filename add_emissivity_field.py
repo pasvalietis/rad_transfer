@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 from yt.data_objects.static_output import Dataset
+import math
 
 from scipy.special import k0
 from astropy import constants as const
@@ -42,6 +43,7 @@ class ThermalBremsstrahlungModel:
         pc = ds.units.physical_constants
 
         kboltz = 1.3807e-16  # Boltzmann's constant
+        hplanck = 6.6261e-27  # Planck's constant cgs
 
         photon_energy = 6. * u.keV
         photon_energy_erg = photon_energy.to(u.erg)
@@ -52,8 +54,14 @@ class ThermalBremsstrahlungModel:
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
         norm_energy = phot_field/(temp*kboltz)
-        gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        #gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
         #gaunt *= (np.sqrt(3.) / np.pi)
+
+        gf = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        gf *= (np.sqrt(3.) / np.pi)
+
+        gaunt = 1.5 #np.nan_to_num(gf, nan=1.5) #- 7.01*np.ones_like(gf)
 
         # brm_49 emission field
         #em_data = (1e8 / 9.26) * np.exp(-norm_energy) / phot_field / np.sqrt(temp)
@@ -61,6 +69,7 @@ class ThermalBremsstrahlungModel:
         factor = 5.44436678165399e-39
         em_data = factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
         em_data *= gaunt
+        em_data *= 1./(hplanck) # to get photon flux in
 
         #print('num cells', num_cells)
         #ncells = 0
@@ -94,7 +103,7 @@ class ThermalBremsstrahlungModel:
 path_test = "datacubes/id0/Blast.0020.vtk"
 path_default = "datacubes/flarecs-id.0035.vtk"
 path_subs = "datacubes/flarecs-id.0035_ss3.h5"
-path = path_subs
+path = path_default
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -170,9 +179,12 @@ plt.xscale('log')
 plt.yscale('log')
 #plt.title('Number density')
 plt.show()
-#plt.savefig('resampled_dens_dist.png')
+plt.savefig('resampled_temp_dist.png')
 #%%
-thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "cell_mass")
+if path == path_subs:
+    thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "cell_mass")
+else:
+    thermal_model = ThermalBremsstrahlungModel("temperature", "density", "cell_mass")
 
 thermal_model.make_intensity_fields(ds)
 #print(ds.all_data()['gas', 'xray_intensity_keV'])
@@ -183,9 +195,9 @@ To be described later
 
 # Make a projection of intensity field
 
-
+#%%
 N = 512
-norm_vec = [0.0, 0.0, 1.0]
+norm_vec = [1.0, 1.0, 1.0]
 prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(ds,
                         [0.0, 0.5, 0.0],  # center position in code units
                         norm_vec,  # normal vector (z axis)
@@ -205,15 +217,17 @@ data_img = np.array(prji)
 imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 
 pcm = ax.pcolor(X, Y, imag,
-                       #norm=colors.LogNorm(vmin=1e-1, vmax=imag.max()),
-                       cmap='inferno', shading='auto')
+                        norm=colors.LogNorm(vmin=1e7, vmax=1e10),
+                        #vmin=0.0,
+                        #vmax=0.04,
+                        cmap='inferno', shading='auto')
 int_units = str(prji.units)
 fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
 ax.set_xlabel('x, Mm')
 ax.set_ylabel('y, Mm')
 
-plt.show()
-plt.savefig('subs_imag_isometric.png')
+#plt.show()
+plt.savefig('full_imag_isometric.png')
 
 # # Considering a downsampled dataset
 # u = ds.units
