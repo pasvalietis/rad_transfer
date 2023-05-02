@@ -15,11 +15,11 @@ import pyxsim
 #     "temperature_unit": (1.13e8, "K"),
 # }
 
-path1 = "datacubes/flarecs-id.0035_ss3.h5"
+path1 = "datacubes/ss3.h5"
 path2 = "GasSloshing/sloshing_nomag2_hdf5_plt_cnt_0150"
 #ds = yt.load(
 #    "datasets/ShockCloud/id1/Cloud-id1.0050.vtk", units_override=units_override, default_species_fields='ionized')
-    #"datacubes/flarecs-id.0035_ss3.h5", units_override=units_override, default_species_fields='ionized')
+    #"datacubes/ss3.h5", units_override=units_override, default_species_fields='ionized')
 #norm = yt.YTQuantity(1.0, "cm**2*keV/dyne")
 
 ds = yt.load(

@@ -19,7 +19,17 @@ class RadDataset(Dataset):
                  nprocs=1,                              # Athena
                  unit_system="cgs",                     # Both      x
                  default_species_fields=None,           # Both      x
-                 magnetic_normalization="gaussian", ):  # Athena
+                 magnetic_normalization="gaussian",     # Athena
+                 downsample_factor=1,                   # Rad
+                 debug=True):  # Athena
+
+        print('\nRadDataset || Debug Mode ' + ("on" if debug else "off"))
+
+        # for debugging, use n=3 subsampled vtk dataset
+        if not debug:                                   # Rad
+            ytobj = self.downsample(ytobj, downsample_factor)
+        else:
+            ytobj = load('ss3.h5', hint="YTGridDataset")
 
         self.fluid_types += ("raddataset",)             # Both      x
 
@@ -96,7 +106,14 @@ class RadDataset(Dataset):
         ny = complex(0, nDim[1])
         nz = complex(0, nDim[2])
 
+        print('\nDownsampling...\n')
         rds = obj.r[::nx, ::ny, ::nz]
 
-        newName = obj.basename.rsplit(".", 1)[0] + "_ss" + str(n)
+        # newName = obj.basename.rsplit(".", 1)[0] + "_ss" + str(n)
+        newName = "ss" + str(n)
         save = rds.save_as_dataset(filename=newName, fields=obj.field_list)
+
+        print('\nLoading YTGridDataset...\n')
+        nds = load(save, hint="YTGridDataset")
+
+        return nds

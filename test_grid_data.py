@@ -7,4 +7,4 @@ from yt.units import dimensions
 import pyxsim
 #%%
 ds = yt.load(
-    "datacubes/flarecs-id.0035_ss3.h5", default_species_fields="ionized")
+    "datacubes/ss3.h5", default_species_fields="ionized")
