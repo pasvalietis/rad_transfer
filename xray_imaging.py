@@ -6,6 +6,7 @@ import matplotlib.colors as colors
 import matplotlib.cbook as cbook
 from matplotlib import cm
 #yt.toggle_interactivity()
+from add_emissivity_field import ThermalBremsstrahlungModel
 #%%
 yt.enable_parallelism()
 '''
@@ -27,11 +28,12 @@ ds = yt.load("datacubes/flarecs-id.0035.vtk", units_override=units_override, def
 ds.field_list
 
 #%%
-
+emin = 6.0
+emax = 6.1
 # source_model = pyxsim.CIESourceModel(atomic_db_model_name, emin, emax, nbins, Zmet)
-thermal_model = pyxsim.CIESourceModel("apec", 6.0, 12.0, 100, 0.2, binscale='log')
+thermal_model = pyxsim.CIESourceModel("apec", emin, emax, 100, 0.2, binscale='log')
 #%%
-xray_fields = thermal_model.make_intensity_fields(ds, 6.0, 12.0, dist=(1.5e11, "m"))
+xray_fields = thermal_model.make_intensity_fields(ds, emin, emax, dist=(1.5e11, "m"))
 print(xray_fields)
 #%%
 # Project and save image
@@ -45,7 +47,7 @@ interpolated=False, north_vector=None, num_threads=1, method='integrate')
 #%%
 # Resolution
 N = 512
-norm_vec = [1.0, 1.0, 1.0]
+norm_vec = [0.0, 0.0, 1.0]
 prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(ds,
                         [0.0, 0.5, 0.0],  # center position in code units
                         norm_vec,  # normal vector (z axis)
