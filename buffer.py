@@ -1,12 +1,32 @@
 from yt import load
-from yt.frontends.ytdata.data_structures import YTDataset
-from yt.frontends.athena.data_structures import AthenaDataset
+from yt.data_objects.static_output import Dataset
+from yt.fields.magnetic_field import get_magnetic_normalization
 
 
-class customDataset(AthenaDataset):
+class customDataset(Dataset):
+    _index_class = None             # Class used for indexing
+    _field_info_class = None        # Class used to set up field information
+    _dataset_type = "RadDataset"    # Name of type of dataset
 
-    def __init__(self, filename):
-        super().__init__(filename)
+    def __init__(self, ytobj,
+                 dataset_type="RadDataset",
+                 storage_filename=None,
+                 particle_filename=None,
+                 parameters=None,
+                 units_override=None,
+                 nprocs=1,
+                 unit_system="cgs",
+                 default_species_fields=None,
+                 magnetic_normalization="gaussian", ):
+
+        self.fluid_types += ("RadDataset",)
+        self.nprocs = nprocs
+        if parameters is None:
+            parameters = {}
+        self.specified_parameters = parameters.copy()
+        if units_override is None:
+            units_override = {}
+        self._magnetic_factor = get_magnetic_normalization(magnetic_normalization)
 
 
 def dsl(obj, n=1):
