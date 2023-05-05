@@ -8,3 +8,5 @@ debug = True
 
 orig_ds = None if debug else load(path1, hint="AthenaDataset")
 ds = RadDataset(orig_ds, downsample_factor=4, debug=debug)
+
+print(ds)

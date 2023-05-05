@@ -1,0 +1,20 @@
+Important Fields:
+[('athena', 'cell_centered_B_x'),
+('athena', 'cell_centered_B_y'), 
+('athena', 'cell_centered_B_z'), 
+('athena', 'density'), 
+('athena', 'momentum_x'), 
+('athena', 'momentum_y'), 
+('athena', 'momentum_z'), 
+('athena', 'scalar[0]'), 
+('athena', 'scalar[1]'), 
+('athena', 'total_energy')]
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Order of Operations:
+1) takes full yt object (eg. AthenaDataset)
+2) subsamples it into        YTGridDataset
+3) loads subsampled into     RadDataset
+
+Process only from RadDataset to continue
