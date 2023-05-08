@@ -108,16 +108,11 @@ class ThermalBremsstrahlungModel:
             units="photons/cm**3/s/arcsec**2",
         )
 
-indstype = 'full'
+indstype = 'subs'
 path_test = "datacubes/id0/Blast.0020.vtk"
 path_default = "datacubes/flarecs-id.0035.vtk"
 path_subs = "datacubes/flarecs-id.0035_ss3.h5"
 #path_subs = "datacubes/flarecs-id.0035_ss2.h5"
-
-if indstype == 'full':
-    path = path_default
-elif indstype == 'subs':
-    path = path_subs
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -128,6 +123,13 @@ units_override = {
     "velocity_unit": (1.366e6, "m/s"),
     "temperature_unit": (1.13e8, "K"),
 }
+
+if indstype == 'full':
+    path = path_default
+    ds = yt.load(path, units_override=units_override, default_species_fields='ionized')
+elif indstype == 'subs':
+    path = path_subs
+    ds = yt.load(path)
 
 # Add temperature field to a subsampled dataset // Talk about it to Sabastian
 #%%
@@ -186,7 +188,7 @@ def _subs_temperature(field, data):
     return (mu * renorm * data["gas", "pressure"] / data["gas", "dens"] * pc.mh / pc.kboltz).in_units("K")
 
 #%%
-ds = yt.load(path, units_override=units_override, default_species_fields='ionized')
+
 
 #%%
 if path == path_subs:
