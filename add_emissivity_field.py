@@ -12,6 +12,9 @@ from astropy import units as u
 from yt.fields.particle_fields import obtain_relative_velocity_vector
 from yt.fields.vector_operations import get_bulk
 
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+
 #%%
 
 class ThermalBremsstrahlungModel:
@@ -54,7 +57,7 @@ class ThermalBremsstrahlungModel:
         orig_shape = chunk[self.temperature_field].shape
         num_cells = len(chunk[self.mass_field])
         dens = chunk[self.density_field].d
-        mass = chunk[self.density_field].d
+        mass = chunk[self.mass_field].d
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
         norm_energy = phot_field/(temp*kboltz)
@@ -187,6 +190,10 @@ def _subs_temperature(field, data):
     mu = 0.5924489101195808
     return (mu * renorm * data["gas", "pressure"] / data["gas", "dens"] * pc.mh / pc.kboltz).in_units("K")
 
+def _subs_mass(field, data):
+    renorm = 4.70958407245e+35
+    return (renorm * data["gas", "mass"])
+
 #%%
 
 
@@ -251,40 +258,48 @@ if path == path_subs:
         units="K",
     )
 
+    ds.add_field(
+        ("gas", "subs_mass"),
+        function=_subs_mass,
+        sampling_type="cell",
+        units="g",
+    )
+
+
 #%%
-# Plot a histogram of a field phys. parameter
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-# n_bins = 1000
-ftype = 'gas' # specific field_type
-fname = 'temperature'
-bins = 10**(np.linspace(np.log10(ds.all_data()[(ftype, fname)].min()/10.),
-            np.log10(ds.all_data()[(ftype, fname)].max()*10.),
-            500))
-count, bins, ignored = plt.hist(ds.all_data()[(ftype, fname)], density=True, log=True, bins=bins)
+param_hist = False
+if param_hist:
+    # Plot a histogram of a field phys. parameter
 
-if fname == 'velocity_x':
-    bins = 10 ** (np.linspace(np.log10(np.abs(ds.all_data()[(ftype, fname)]).min() / 10.),
-                              np.log10(np.abs(ds.all_data()[(ftype, fname)]).max() * 10.),
-                              500))
-    count, bins, ignored = plt.hist(np.abs(ds.all_data()[(ftype, fname)]), density=True, log=True, bins=bins)
-    #plt.xlim(np.abs(ds.all_data()[(ftype, fname)].min()) / 1e8, np.abs(ds.all_data()[(ftype, fname)].max()) * 10.)
-else:
-    plt.xlim(ds.all_data()[(ftype, fname)].min()/10., ds.all_data()[(ftype, fname)].max()*10.)
-#plt.ylim(1e-7, 1e2)
+    # n_bins = 1000
+    ftype = 'gas' # specific field_type
+    fname = 'temperature'
+    bins = 10**(np.linspace(np.log10(ds.all_data()[(ftype, fname)].min()/10.),
+                np.log10(ds.all_data()[(ftype, fname)].max()*10.),
+                500))
+    count, bins, ignored = plt.hist(ds.all_data()[(ftype, fname)], density=True, log=True, bins=bins)
 
+    if fname == 'velocity_x':
+        bins = 10 ** (np.linspace(np.log10(np.abs(ds.all_data()[(ftype, fname)]).min() / 10.),
+                                  np.log10(np.abs(ds.all_data()[(ftype, fname)]).max() * 10.),
+                                  500))
+        count, bins, ignored = plt.hist(np.abs(ds.all_data()[(ftype, fname)]), density=True, log=True, bins=bins)
+        #plt.xlim(np.abs(ds.all_data()[(ftype, fname)].min()) / 1e8, np.abs(ds.all_data()[(ftype, fname)].max()) * 10.)
+    else:
+        plt.xlim(ds.all_data()[(ftype, fname)].min()/10., ds.all_data()[(ftype, fname)].max()*10.)
+    #plt.ylim(1e-7, 1e2)
 
-plt.xscale('log')
-plt.yscale('log')
-#plt.title('Number density')
-#plt.show()
-#imgpath = 'img/phys_param_distributions/original/'
-imgpath = 'img/phys_param_distributions/subsampled/'
-plt.savefig(imgpath + 'resampled_'+fname+'_dist.eps')
+    plt.xscale('log')
+    plt.yscale('log')
+    #plt.title('Number density')
+    #plt.show()
+    #imgpath = 'img/phys_param_distributions/original/'
+    imgpath = 'img/phys_param_distributions/subsampled/'
+    plt.savefig(imgpath + 'resampled_'+fname+'_dist.eps')
 
 #%%
 if path == path_subs:
-    thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "mass")
+    thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "subs_mass")
 else:
     thermal_model = ThermalBremsstrahlungModel("temperature", "density", "mass")
 
@@ -320,9 +335,9 @@ data_img = np.array(prji)
 imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 
 pcm = ax.pcolor(X, Y, imag,
-                        #norm=colors.LogNorm(vmin=1e-40, vmax=1e-23),
-                        vmin=1e-24,
-                        vmax=8e-21,
+                        norm=colors.LogNorm(vmin=1e-10, vmax=1e40),
+                        #vmin=1e-6,
+                        #vmax=1.5e-5,
                         cmap='inferno', shading='auto')
 int_units = str(prji.units)
 fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
@@ -332,7 +347,7 @@ ax.set_ylabel('y, Mm')
 #plt.show()
 figpath = './img/rad_tr_thermal_brem/'
 plt.savefig(figpath + 'therm_brem_front_view_'+indstype+'.png')
-#%%
+7#%%
 # # Considering a downsampled dataset
 # u = ds.units
 # norm = 1. * u.dyn / u.cm**2
