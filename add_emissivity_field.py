@@ -108,11 +108,16 @@ class ThermalBremsstrahlungModel:
             units="photons/cm**3/s/arcsec**2",
         )
 
+indstype = 'full'
 path_test = "datacubes/id0/Blast.0020.vtk"
 path_default = "datacubes/flarecs-id.0035.vtk"
 path_subs = "datacubes/flarecs-id.0035_ss3.h5"
 #path_subs = "datacubes/flarecs-id.0035_ss2.h5"
-path = path_subs
+
+if indstype == 'full':
+    path = path_default
+elif indstype == 'subs':
+    path = path_subs
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -192,7 +197,7 @@ if path == path_subs:
         units="g/cm**3",
     )
 
-    ds.add_field
+    # ds.add_field
 
     for comp in "xyz":
         ds.add_field(
@@ -292,7 +297,7 @@ To be described later
 
 #%%
 N = 512
-norm_vec = [1.0, 1.0, 1.0]
+norm_vec = [0.0, 0.0, 1.0]
 prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(ds,
                         [0.0, 0.5, 0.0],  # center position in code units
                         norm_vec,  # normal vector (z axis)
@@ -315,7 +320,7 @@ imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 pcm = ax.pcolor(X, Y, imag,
                         #norm=colors.LogNorm(vmin=1e-40, vmax=1e-23),
                         vmin=1e-24,
-                        vmax=4e-21,
+                        vmax=8e-21,
                         cmap='inferno', shading='auto')
 int_units = str(prji.units)
 fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
@@ -323,7 +328,8 @@ ax.set_xlabel('x, Mm')
 ax.set_ylabel('y, Mm')
 
 #plt.show()
-plt.savefig('therm_brem_front_view_isometric.png')
+figpath = './img/rad_tr_thermal_brem/'
+plt.savefig(figpath + 'therm_brem_front_view_'+indstype+'.png')
 #%%
 # # Considering a downsampled dataset
 # u = ds.units
