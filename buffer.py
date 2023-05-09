@@ -57,7 +57,11 @@ class RadDataset(Dataset):
 
         # for debugging, use n=3 subsampled vtk dataset
         print('\nRadDataset || Debug Mode ' + ("on" if debug else "off"))
+        if not hasattr(ytobj, "cosmological_simulation"):
+            self.cosmological_simulation = 0
         if not debug:                                   # Rad
+            self.orig_tempobj = ytobj                   # Copy of the initial object before downsampling
+                                                        # (export paramtetrs, mag. field units etc.)
             self.tempobj = self.downsample(ytobj, downsample_factor)
         else:
             self.tempobj = load('ss3.h5', hint="YTGridDataset")
@@ -112,7 +116,7 @@ class RadDataset(Dataset):
                 continue
             setattr(self, f"{unit}_unit", self.quan(1.0, cgs))
 
-        self.magnetic_unit = self.tempobj.magnetic_unit
+        self.magnetic_unit = self.orig_tempobj.magnetic_unit
         # self.magnetic_unit.convert_to_units("gauss")
         self.velocity_unit = self.tempobj.velocity_unit
 
