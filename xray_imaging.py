@@ -188,6 +188,8 @@ fig, ax = plt.subplots(1, 2, figsize=(10, 4), dpi=300)
 
 pcm = ax[0].pcolor(X, Y, imag,
                        #norm=colors.LogNorm(vmin=1e-1, vmax=imag.max()),
+                        vmin=1e-1,
+                        vmax=2,
                        cmap='inferno', shading='auto', rasterized=True)
 int_units = str(prji.units)
 fig.colorbar(pcm, ax=ax[0], extend='max', label='$'+int_units.replace("**", "^")+'$')
