@@ -61,31 +61,29 @@ class ThermalBremsstrahlungModel:
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
         norm_energy = phot_field/(temp*kboltz)
-        dVi = mass / dens
-        # gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
-        # np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
-        # gaunt *= (np.sqrt(3.) / np.pi)
+        idV = dens / mass
+        #gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        #gaunt *= (np.sqrt(3.) / np.pi)
 
         gf = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
         gf *= (np.sqrt(3.) / np.pi)
 
-        gaunt = 1.5 #.5 #np.nan_to_num(gf, nan=1.5) #- 7.01*np.ones_like(gf)
+        gaunt = 1 #.5 #np.nan_to_num(gf, nan=1.5) #- 7.01*np.ones_like(gf)
 
         # brm_49 emission field
         #em_data = (1e8 / 9.26) * np.exp(-norm_energy) / phot_field / np.sqrt(temp)
         # Aschwanden emissivity
-        # factor = 5.44436678165399e-39
-        # au_dist = 14959787070000.0 # One astronomical unit
-        # em_data = dVi*factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
-        # em_data *= 1./(phot_field) # to get flux in photons
-        # em_data *= 1./(hplanck) # to get flux in photons/(s cm^2 keV)
-        # em_data *= 1./(4. * np.pi * au_dist * au_dist)
-        # em_data /= ((1.*u.radian).to(u.arcsec).value**2.)
+        factor = 5.44436678165399e-39
+        au_dist = 14959787070000.0 # One astronomical unit
+        em_data = idV*factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
+        #em_data *= gaunt
+        em_data *= 1./(phot_field) # to get flux in photons
+        em_data *= 1./(hplanck) # to get flux in photons/(s cm^2 keV)
+        em_data *= 1./(au_dist**2.)
 
-        em_data = 8.1e-39*dVi*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))/(phot_field)
-        em_data /= ((1. * u.radian).to(u.arcsec).value ** 2. * 4. * np.pi * (6*u.keV).to(u.erg).value)
-        # print('num cells', num_cells)
-        # ncells = 0
+        #print('num cells', num_cells)
+        #ncells = 0
         print(len(em_data))
         return em_data
 
@@ -146,10 +144,10 @@ def _subs_density(field, data):
     renorm = 229730894.015
     return (data["grid", "density"] * renorm).in_units("g/cm**3")
 
-def eint_from_etot(data):
-            eint = (
+def eint_from_etot(data):                                                                                                                                                                           
+            eint = (                                                                                                                                                                                        
                 data["grid", "total_energy"] - data["gas", "kinetic_energy_density"]
-            )
+            )                                                                                                                                                                                               
             #if ("athena", "cell_centered_B_x") in self.field_list:
             eint -= data["gas", "magnetic_energy_density"]
             return eint
@@ -188,13 +186,12 @@ def _subs_pressure(field, data):
 
 def _subs_temperature(field, data):
     pc = data.ds.units.physical_constants
-    #renorm = 1.046449052e+16 #1e24
-    renorm = 1.84150150581e+16
+    renorm = 1.046449052e+16#1e24
     mu = 0.5924489101195808
     return (mu * renorm * data["gas", "pressure"] / data["gas", "dens"] * pc.mh / pc.kboltz).in_units("K")
 
 def _subs_mass(field, data):
-    renorm = 2.87163619e+37
+    renorm = 4.70958407245e+35
     return (renorm * data["gas", "mass"])
 
 #%%
@@ -338,9 +335,9 @@ data_img = np.array(prji)
 imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 
 pcm = ax.pcolor(X, Y, imag,
-                        #norm=colors.LogNorm(vmin=1e-30, vmax=1e20),
-                        vmin=1e-1,
-                        vmax=2,
+                        norm=colors.LogNorm(vmin=1e-10, vmax=1e40),
+                        #vmin=1e-6,
+                        #vmax=1.5e-5,
                         cmap='inferno', shading='auto')
 int_units = str(prji.units)
 fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
@@ -350,7 +347,7 @@ ax.set_ylabel('y, Mm')
 #plt.show()
 figpath = './img/rad_tr_thermal_brem/'
 plt.savefig(figpath + 'therm_brem_front_view_'+indstype+'.png')
-#%%
+7#%%
 # # Considering a downsampled dataset
 # u = ds.units
 # norm = 1. * u.dyn / u.cm**2
