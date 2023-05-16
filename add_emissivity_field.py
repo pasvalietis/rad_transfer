@@ -10,6 +10,11 @@ from scipy.special import k0
 from astropy import constants as const
 from astropy import units as u
 from yt.fields.particle_fields import obtain_relative_velocity_vector
+from yt.fields.vector_operations import get_bulk
+
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+
 #%%
 
 class ThermalBremsstrahlungModel:
@@ -52,7 +57,7 @@ class ThermalBremsstrahlungModel:
         orig_shape = chunk[self.temperature_field].shape
         num_cells = len(chunk[self.mass_field])
         dens = chunk[self.density_field].d
-        mass = chunk[self.density_field].d
+        mass = chunk[self.mass_field].d
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
         norm_energy = phot_field/(temp*kboltz)
@@ -106,11 +111,11 @@ class ThermalBremsstrahlungModel:
             units="photons/cm**3/s/arcsec**2",
         )
 
+indstype = 'subs'
 path_test = "datacubes/id0/Blast.0020.vtk"
 path_default = "datacubes/flarecs-id.0035.vtk"
 path_subs = "datacubes/flarecs-id.0035_ss3.h5"
 #path_subs = "datacubes/flarecs-id.0035_ss2.h5"
-path = path_subs
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -122,41 +127,54 @@ units_override = {
     "temperature_unit": (1.13e8, "K"),
 }
 
+if indstype == 'full':
+    path = path_default
+    ds = yt.load(path, units_override=units_override, default_species_fields='ionized')
+elif indstype == 'subs':
+    path = path_subs
+    ds = yt.load(path)
+
 # Add temperature field to a subsampled dataset // Talk about it to Sabastian
 #%%
-def _temperature(field, data):
-    pc = data.ds.units.physical_constants
-    return (data.ds.mu * data["gas", "pressure"] / data["gas", "density"] * pc.mh / pc.kboltz).in_units("K")
+
+axis_names = ('x', 'y', 'z')
+axis_order = ('x', 'y', 'z')
 
 def _subs_density(field, data):
-    return (data["grid", "density"] * 229730894.015).in_units("g/cm**3")
+    renorm = 229730894.015
+    return (data["grid", "density"] * renorm).in_units("g/cm**3")
 
-def _subs_eint_from_etot(data):
-    return _subs_eint_from_etot(data) / data["gas", "dens"]
+def eint_from_etot(data):                                                                                                                                                                           
+            eint = (                                                                                                                                                                                        
+                data["grid", "total_energy"] - data["gas", "kinetic_energy_density"]
+            )                                                                                                                                                                                               
+            #if ("athena", "cell_centered_B_x") in self.field_list:
+            eint -= data["gas", "magnetic_energy_density"]
+            return eint
+
+def _subs_velocity_field(comp):
+    def _velocity(field, data):
+        renorm = 1.#3.63014233846e+16
+        return renorm*data["grid", f"momentum_{comp}"] / data["gas", "dens"]
+    return _velocity
 
 def _subs_specific_thermal_energy(field, data):
-    return _subs_eint_from_etot(data) / data["gas", "dens"]
+    return eint_from_etot(data) / data["grid", "density"]
 
 def _subs_kinetic_energy_density(field, data):
     v = obtain_relative_velocity_vector(data)
     return 0.5 * data["gas", "dens"] * (v**2).sum(axis=0)
 
-def eint_from_etot(data):                                                                                                                                                                           
-            eint = (                                                                                                                                                                                        
-                data["gas", "total_energy"] - data["gas", "kinetic_energy_density"]
-            )                                                                                                                                                                                               
-            #if ("athena", "cell_centered_B_x") in self.field_list:
-            #    eint -= data["gas", "magnetic_energy_density"]
-            return eint
+def _subs_magnetic_field_strength(field, data):
+    xm = f"cell_centered_B_{axis_names[0]}"
+    ym = f"cell_centered_B_{axis_names[1]}"
+    zm = f"cell_centered_B_{axis_names[2]}"
+    B2 = (data["grid", xm]) ** 2 + (data["grid", ym]) ** 2 + (data["grid", zm]) ** 2
+    return np.sqrt(B2)
 
-def _subs_velocity_field(comp):
-    def _velocity(field, data):
-        renorm = 3.63014233846e+16
-        return renorm*data["grid", f"momentum_{comp}"] / data["gas", "dens"]
-    return _velocity
-
-def _subs_specific_thermal_energy(field, data):
-    return eint_from_etot(data) / data["gas", "dens"]
+def _subs_magnetic_energy_density(field, data):
+    B = data["gas", "magnetic_field_strength"]
+    return 0.5 * B * B / (4.0 * np.pi) # mag_factors(B.units.dimensions)
 
 def _subs_pressure(field, data):
     """M{(Gamma-1.0)*rho*E}"""
@@ -168,12 +186,16 @@ def _subs_pressure(field, data):
 
 def _subs_temperature(field, data):
     pc = data.ds.units.physical_constants
-    renorm = 1e24
+    renorm = 1.046449052e+16#1e24
     mu = 0.5924489101195808
     return (mu * renorm * data["gas", "pressure"] / data["gas", "dens"] * pc.mh / pc.kboltz).in_units("K")
 
+def _subs_mass(field, data):
+    renorm = 4.70958407245e+35
+    return (renorm * data["gas", "mass"])
+
 #%%
-ds = yt.load(path, units_override=units_override, default_species_fields='ionized')
+
 
 #%%
 if path == path_subs:
@@ -184,6 +206,8 @@ if path == path_subs:
         units="g/cm**3",
     )
 
+    # ds.add_field
+
     for comp in "xyz":
         ds.add_field(
             ("gas", f"velocity_{comp}"),
@@ -191,6 +215,20 @@ if path == path_subs:
             function=_subs_velocity_field(comp),
             units='cm/s',
         )
+
+    ds.add_field(
+        ("gas", "magnetic_field_strength"),
+        function=_subs_magnetic_field_strength,
+        sampling_type="cell",
+        units="G",
+    )
+
+    ds.add_field(
+        ("gas", "magnetic_energy_density"),
+        function=_subs_magnetic_energy_density,
+        sampling_type="cell",
+        units="dyn/cm**2",
+    )
 
     ds.add_field(
         ("gas", "kinetic_energy_density"),
@@ -220,42 +258,48 @@ if path == path_subs:
         units="K",
     )
 
+    ds.add_field(
+        ("gas", "subs_mass"),
+        function=_subs_mass,
+        sampling_type="cell",
+        units="g",
+    )
 
 
 #%%
-# Plot a histogram of a field phys. parameter
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-# n_bins = 1000
-ftype = 'gas' # specific field_type
-fname = 'velocity_x'
-bins = 10**(np.linspace(np.log10(ds.all_data()[(ftype, fname)].min()/10.),
-            np.log10(ds.all_data()[(ftype, fname)].max()*10.),
-            500))
-count, bins, ignored = plt.hist(ds.all_data()[(ftype, fname)], density=True, log=True, bins=bins)
+param_hist = False
+if param_hist:
+    # Plot a histogram of a field phys. parameter
 
-if fname == 'velocity_x':
-    bins = 10 ** (np.linspace(np.log10(np.abs(ds.all_data()[(ftype, fname)]).min() / 10.),
-                              np.log10(np.abs(ds.all_data()[(ftype, fname)]).max() * 10.),
-                              500))
+    # n_bins = 1000
+    ftype = 'gas' # specific field_type
+    fname = 'temperature'
+    bins = 10**(np.linspace(np.log10(ds.all_data()[(ftype, fname)].min()/10.),
+                np.log10(ds.all_data()[(ftype, fname)].max()*10.),
+                500))
     count, bins, ignored = plt.hist(ds.all_data()[(ftype, fname)], density=True, log=True, bins=bins)
-    plt.xlim(np.abs(ds.all_data()[(ftype, fname)].min()) / 10., np.abs(ds.all_data()[(ftype, fname)].max()) * 10.)
-else:
-    plt.xlim(ds.all_data()[(ftype, fname)].min()/10., ds.all_data()[(ftype, fname)].max()*10.)
-#plt.ylim(1e-7, 1e2)
 
+    if fname == 'velocity_x':
+        bins = 10 ** (np.linspace(np.log10(np.abs(ds.all_data()[(ftype, fname)]).min() / 10.),
+                                  np.log10(np.abs(ds.all_data()[(ftype, fname)]).max() * 10.),
+                                  500))
+        count, bins, ignored = plt.hist(np.abs(ds.all_data()[(ftype, fname)]), density=True, log=True, bins=bins)
+        #plt.xlim(np.abs(ds.all_data()[(ftype, fname)].min()) / 1e8, np.abs(ds.all_data()[(ftype, fname)].max()) * 10.)
+    else:
+        plt.xlim(ds.all_data()[(ftype, fname)].min()/10., ds.all_data()[(ftype, fname)].max()*10.)
+    #plt.ylim(1e-7, 1e2)
 
-plt.xscale('log')
-plt.yscale('log')
-#plt.title('Number density')
-#plt.show()
-#imgpath = 'img/phys_param_distributions/original/'
-imgpath = 'img/phys_param_distributions/subsampled/'
-plt.savefig(imgpath + 'resampled_'+fname+'_dist.eps')
+    plt.xscale('log')
+    plt.yscale('log')
+    #plt.title('Number density')
+    #plt.show()
+    #imgpath = 'img/phys_param_distributions/original/'
+    imgpath = 'img/phys_param_distributions/subsampled/'
+    plt.savefig(imgpath + 'resampled_'+fname+'_dist.eps')
 
 #%%
 if path == path_subs:
-    thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "mass")
+    thermal_model = ThermalBremsstrahlungModel("temperature", "dens", "subs_mass")
 else:
     thermal_model = ThermalBremsstrahlungModel("temperature", "density", "mass")
 
@@ -291,9 +335,9 @@ data_img = np.array(prji)
 imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 
 pcm = ax.pcolor(X, Y, imag,
-                        norm=colors.LogNorm(vmin=1e-25, vmax=1e19),
-                        #vmin=1e-22,
-                        #vmax=1e-20,
+                        norm=colors.LogNorm(vmin=1e-10, vmax=1e40),
+                        #vmin=1e-6,
+                        #vmax=1.5e-5,
                         cmap='inferno', shading='auto')
 int_units = str(prji.units)
 fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
@@ -301,8 +345,9 @@ ax.set_xlabel('x, Mm')
 ax.set_ylabel('y, Mm')
 
 #plt.show()
-plt.savefig('therm_brem_front_view_full.png')
-#%%
+figpath = './img/rad_tr_thermal_brem/'
+plt.savefig(figpath + 'therm_brem_front_view_'+indstype+'.png')
+7#%%
 # # Considering a downsampled dataset
 # u = ds.units
 # norm = 1. * u.dyn / u.cm**2
