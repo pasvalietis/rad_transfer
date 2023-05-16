@@ -57,8 +57,13 @@ class RadDataset(Dataset):
 
         # for debugging, use n=3 subsampled vtk dataset
         print('\nRadDataset || Debug Mode ' + ("on" if debug else "off"))
-        if not debug:                                   # Rad
-            self.tempobj = self.downsample(ytobj, downsample_factor)
+        # boolean debug parameter True or False
+        if not debug:
+            # Change this flag later. Checks if passed ytobj has already been subsampled
+            if ytobj.basename.startswith('ss'):
+                self.tempobj = ytobj
+            else:
+                self.tempobj = self.downsample(ytobj, downsample_factor)
         else:
             self.tempobj = load('ss3.h5', hint="YTGridDataset")
 
@@ -97,7 +102,6 @@ class RadDataset(Dataset):
         self.domain_right_edge = -self.tempobj.domain_right_edge
         self.domain_width = self.tempobj.domain_width
         self.domain_dimensions = self.tempobj.domain_dimensions
-
         self.current_time = self.tempobj.current_time
 
     def _set_code_unit_attributes(self):            # Note - passed for agreement w/ abstract methods
