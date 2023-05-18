@@ -142,7 +142,7 @@ def func_intensity_fe21(lines, v_sample, te_sample, rho_sample, rho_char_in, te_
     #
     # (old 4.1 Fe XX1 all)
     #
-    n_wv = 201 # set resulotion of the wavelength
+    n_wv = 201 # set resolution of the wavelength
     wv_arr = np.linspace(1352, 1356, n_wv)
     I_nu = np.zeros(n_wv)
     lines_cm = lines*l_char
