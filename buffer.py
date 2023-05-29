@@ -41,6 +41,8 @@ class RadDataset(Dataset):
     _field_info_class = None        # Class used to set up field information
     _dataset_type = "raddataset"    # Name of type of dataset
 
+
+
     def __init__(self,
                  ytobj,                                 # This dataset will accept yt object as input
                  dataset_type="RadDataset",             # Both      x
@@ -61,9 +63,12 @@ class RadDataset(Dataset):
         if not debug:
             # Change this flag later. Checks if passed ytobj has already been subsampled
             if ytobj.basename.startswith('ss'):
+                self.orig_tempobj = ytobj  # Copy of the initial object before downsampling
+                                           # (export parameters, mag. field units etc.)
                 self.tempobj = ytobj
             else:
-                self.tempobj = self.downsample(ytobj, downsample_factor)
+                self.orig_tempobj = ytobj
+                self.tempobj = ytobj  # self.downsample(ytobj, downsample_factor)
         else:
             self.tempobj = load('ss3.h5', hint="YTGridDataset")
 
@@ -82,7 +87,7 @@ class RadDataset(Dataset):
             self.tempobj.filename,  # Note - ensure filename is accessible
             dataset_type,
             units_override=units_override,
-            unit_system=unit_system,
+            unit_system=ytobj.unit_system,
             default_species_fields=default_species_fields,
         )
 
@@ -90,8 +95,13 @@ class RadDataset(Dataset):
             storage_filename = self.basename + ".yt"
 
         self.storage_filename = storage_filename        # Both      x
+        if ytobj.filename.endswith(('.h5', '.hdf5')):
+            is_h5 = True
+        else:
+            is_h5 = False
 
-        del self.tempobj
+        #del self.tempobj   # I think this wouldn't work this way because tempobj is just a pointer
+                            # to the original yt dataset and therefore can not be deleted (Ivan)
 
     @classmethod
     def _is_valid(cls, filename, *args, **kwargs):  # Note - passed for agreement w/ abstract methods
@@ -123,18 +133,33 @@ class RadDataset(Dataset):
     def __str__(self):
         return self.basename.rsplit(".", 1)[0]
 
-    def downsample(self, obj, n=1):
-        """
-        Uses yt fixed resolution function to load a yt object from the target path
-        at a specified subsampling rate
+    # def create_buffer:  # Creating a buffer file in case if original dataset is not a h5 file
 
-        If n is not specified, default n=1 and no down sampling will occur
 
-        :param obj: Path containing full dataset
-        :param n: Down-sampling factor
-        :return: Down-sampled yt object
-        """
+'''
+Try to write into a downsampled .h5 file only physical fields that we need
+i.e. 
+# coordinates information (domain_dimensions, domain_left_edge, domain_right_edge)
+# ('gas', 'density')
+# ('gas', 'temperature')
+# Later...
+# ('gas', 'magnetic_field')
+'''
 
+def downsample(obj, rad_fields=False, n=1):
+    """
+    Uses yt fixed resolution function to load a yt object from the target path
+    at a specified subsampling rate
+
+    If n is not specified, default n=1 and no down sampling will occur
+
+    :param obj: Path containing full dataset
+    :param rad_fields: True if fields to be downsampled are
+    [('gas','temperature'),('gas','density')] and perhaps [('gas','magnetic_field')]
+    :param n: Down-sampling factor
+    :return: Down-sampled yt object
+    """
+    if n != 1:
         nDim = obj.domain_dimensions / n
         nx = complex(0, nDim[0])
         ny = complex(0, nDim[1])
@@ -142,12 +167,25 @@ class RadDataset(Dataset):
 
         print('\nDownsampling...\n')
         rds = obj.r[::nx, ::ny, ::nz]
+    else:
+        rds = obj.all_data()
 
-        # newName = obj.basename.rsplit(".", 1)[0] + "_ss" + str(n)
-        newName = "ss" + str(n)
-        save = rds.save_as_dataset(filename=newName, fields=obj.field_list)
+    # newName = obj.basename.rsplit(".", 1)[0] + "_ss" + str(n)
+    rad_fields_list = [('gas', 'temperature'), ('gas', 'density'), ('gas', 'mass')]
 
+    if rad_fields and n == 1:
+        newName = "rad_fields_info_" + str(n)
+        save = rds.save_as_dataset(filename=newName, fields=rad_fields_list)
+        print('\nLoading YTDataContainerDataset...\n')
+        nds = load(save, hint="YTDataContainerDataset")
+    else:
+        newName = "subs_dataset_" + str(n)
+
+        if rad_fields:
+            save = rds.save_as_dataset(filename=newName, fields=rad_fields_list)
+        else:
+            save = rds.save_as_dataset(filename=newName, fields=obj.field_list)
         print('\nLoading YTGridDataset...\n')
         nds = load(save, hint="YTGridDataset")
 
-        return nds
+    return nds
