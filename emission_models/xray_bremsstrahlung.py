@@ -27,6 +27,10 @@ class ThermalBremsstrahlungModel:
         self.density_field = ds._get_field_info(self.density_field).name
         self.mass_field = ds._get_field_info(self.mass_field).name
         self.ftype = self.temperature_field[0]
+        self.left_edge = ds.domain_left_edge
+        self.right_edge = ds.domain_right_edge
+        self.L_0 = 1.5e10
+        self.domain_dimensions = ds.domain_dimensions
 
     # def do_something_with(data):
     #     data = np.zeros(10000000)
@@ -40,8 +44,6 @@ class ThermalBremsstrahlungModel:
 
     def process_data(self, chunk):
 
-        pc = ds.units.physical_constants
-
         kboltz = 1.3807e-16  # Boltzmann's constant
         hplanck = 6.6261e-27  # Planck's constant cgs
 
@@ -54,8 +56,13 @@ class ThermalBremsstrahlungModel:
         mass = chunk[self.mass_field].d
         temp = chunk[self.temperature_field].d
         # em_data = dens**2.
-        norm_energy = phot_field/(temp*kboltz)
-        idV = dens / mass
+        norm_energy = phot_field / (temp*kboltz)
+        sizes = np.abs(self.right_edge - self.left_edge)
+        idV = mass / dens
+        #for i in range(3):
+        #idV *= ((self.L_0 / self.domain_dimensions[i]) * sizes[i])
+
+        # idV = 4.74e17 # mass / dens
         #gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
         #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
         #gaunt *= (np.sqrt(3.) / np.pi)
@@ -70,15 +77,19 @@ class ThermalBremsstrahlungModel:
         # Aschwanden emissivity
         factor = 5.44436678165399e-39
         au_dist = 14959787070000.0 # One astronomical unit
-        em_data = idV*factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
-        #em_data *= gaunt
-        em_data *= 1./(phot_field) # to get flux in photons
-        em_data *= 1./(hplanck) # to get flux in photons/(s cm^2 keV)
-        em_data *= 1./(au_dist**2.)
+        #ORIGINAL
+        #em_data = idV*factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
+        ##em_data *= gaunt
+        #em_data *= 1./(phot_field) # to get flux in photons
+        #em_data *= 1./(hplanck) # to get flux in photons/(s cm^2 keV)
+        #em_data *= 1./(au_dist**2.)
 
+        # TEST
+        em_data = 8.1e-39 * np.exp(-np.abs(norm_energy)) * ((dens**2.)/np.sqrt(np.abs(temp))) * idV
+        #angular_factor = 1. / (4. * np.pi * ((u.rad).to(u.arcsec)) ** 2.)
+        #em_data *= angular_factor / photon_energy_erg.value
         #print('num cells', num_cells)
         #ncells = 0
-        print(len(em_data))
         return em_data
 
     def make_intensity_fields(
