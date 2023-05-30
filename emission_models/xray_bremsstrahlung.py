@@ -92,10 +92,7 @@ class ThermalBremsstrahlungModel:
         #ncells = 0
         return em_data
 
-    def make_intensity_fields(
-        self,
-        ds,
-    ):
+    def make_intensity_fields(self, ds):
         self.setup_model(ds)
         ftype = self.ftype
         ei_name = (ftype, f"xray_intensity_keV")
