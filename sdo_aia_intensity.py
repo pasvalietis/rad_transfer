@@ -28,7 +28,29 @@ aia_trm_interpf = interpolate.interp1d(
 #%%
 temp_x = np.logspace(5, 8, 290)
 tlog = np.log10(temp_x)
-plt.loglog(tlog, aia_trm_interpf(tlog))
+
+colors = ['darkorchid', 'steelblue', 'mediumaquamarine', 'limegreen', 'goldenrod', 'red']
+
+for ch_ in range(6):
+    #ch_ = 1  # 131A
+
+    aia_trm_interpf = interpolate.interp1d(
+        aia_trm.item()['logt'],
+        aia_trm.item()['temp_response'][:, ch_],
+        fill_value="extrapolate",
+        kind='cubic',
+    )
+    plt.semilogy(tlog, aia_trm_interpf(tlog), color=colors[ch_],
+               linewidth=0.65, label=aia_trm.item()['channels'][ch_][1:]+'Å')
+
+plt.legend()
+plt.ylim(1e-28, 1e-23)
+plt.xlim(5, 7.8)
+plt.xlabel('log$_{10}$T')
+plt.ylabel('DN cm$^5$ pixel$^{-1}$ s$^{-1}$')
+#plt.xticks([5,6,7], ['5', '6', '7'])
+plt.title('AIA Temperature Response Functions $f_{\lambda}(T)$')
+plt.savefig('./img/f_T', dpi = 400)
 plt.show()
 
 #%%
@@ -55,9 +77,9 @@ units_override = {
     "temperature_unit": (1.13e8, "K"),
 }
 
-indstype = 'full'
+indstype = 'subs'
 path_default = "datacubes/flarecs-id.0035.vtk"
-path_subs = "datacubes/flarecs-id.0035_ss3.h5"
+path_subs = "tests/subs_dataset_3.h5"
 
 if indstype == 'full':
     path = path_default
