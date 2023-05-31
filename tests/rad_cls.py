@@ -3,6 +3,7 @@ from buffer import RadDataset  # How to solve yt.utilities.exceptions.YTAmbiguou
 from buffer import downsample
 import os.path
 from emission_models import xray_bremsstrahlung
+from emission_models import uv
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -35,37 +36,54 @@ thermal_model = xray_bremsstrahlung.ThermalBremsstrahlungModel("temperature", "d
 thermal_model.make_intensity_fields(rad_buffer_obj)
 
 #%%
-N = 512
-norm_vec = [0.0, 0.0, 1.0]
-prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-                        rad_buffer_obj,
-                        [0.0, 0.5, 0.0],  # center position in code units
-                        norm_vec,  # normal vector (z axis)
-                        1.0,  # width in code units
-                        N,  # image resolution
-                        'xray_intensity_keV',  # respective field that is being projected
-                        north_vector=[0.0, 1.0, 0.0])
-
-Mm_len = 1 # ds.length_unit.to('Mm').value
-
-X, Y = np.mgrid[-0.5*150*Mm_len:0.5*150*Mm_len:complex(0, N),
-       0*Mm_len:150*Mm_len:complex(0, N)]
+channel = 'A193'
+sdo_aia_model = uv.UVModel("temperature", "density", channel)
+sdo_aia_model.make_intensity_fields(rad_buffer_obj)
+#%%
 
 #%%
-fig, ax = plt.subplots()
-data_img = np.array(prji)
-imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
+N = 512
+nframes = 1
+for i in range(nframes):
+    norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
+    prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+                            rad_buffer_obj,
+                            [0.0, 0.5, 0.0],  # center position in code units
+                            norm_vec,  # normal vector (z axis)
+                            1.0,  # width in code units
+                            N,  # image resolution
+                            'aia_filter_band',  # respective field that is being projected
+                            north_vector=[0.0, 1.0, 0.0])
 
-pcm = ax.pcolor(X, Y, imag,
-                        #norm=colors.LogNorm(vmin=1e-8, vmax=1e8),
-                        vmin=1e-5,
-                        vmax=1e4,
-                        cmap='inferno', shading='auto')
-int_units = str(prji.units)
-fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
-ax.set_xlabel('x, Mm')
-ax.set_ylabel('y, Mm')
+    Mm_len = 1 # ds.length_unit.to('Mm').value
 
-#plt.show()
-figpath = '../img/rad_tr_thermal_brem/'
-plt.savefig(figpath + 'therm_brem_front_view_rad_buff'+'.png')
+    X, Y = np.mgrid[-0.5*150*Mm_len:0.5*150*Mm_len:complex(0, N),
+           0*Mm_len:150*Mm_len:complex(0, N)]
+
+    #%%
+    fig, ax = plt.subplots()
+    data_img = np.array(prji)
+    imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
+
+    vmin=3e2
+    vmax=1e3
+    imag[imag == 0] = vmin
+
+    pcm = ax.pcolor(X, Y, imag,
+                            norm=colors.LogNorm(vmin=vmin, vmax=vmax),
+                            #vmin=1e-5,
+                            #vmax=1.5e4,
+                            cmap='copper', shading='auto')
+    int_units = str(prji.units)
+    #fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
+    fig.colorbar(pcm, ax=ax, extend='max', label='DN/pixel * '+'$'+int_units.replace("**", "^")+'$')
+    ax.set_xlabel('x, Mm')
+    ax.set_ylabel('y, Mm')
+
+    #figpath = '../img/rad_tr_thermal_brem/'
+    #plt.savefig(figpath + 'therm_brem_front_view_rad_buff.png')
+
+    ax.set_title('AIA '+channel[1:]+' Å')
+    #plt.show()
+    figpath = '../img/rad_tr_sdo_aia/mov_'+channel+'/'
+    plt.savefig(figpath + 'sdo_aia_'+channel+'_mov_'+str(i).zfill(3)+'.png')
