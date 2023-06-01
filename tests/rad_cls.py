@@ -39,12 +39,15 @@ thermal_model = xray_bremsstrahlung.ThermalBremsstrahlungModel("temperature", "d
 thermal_model.make_intensity_fields(rad_buffer_obj)
 
 #%%
-channel = 'A171'
+channel = 'A94'
 sdo_aia_model = uv.UVModel("temperature", "density", channel)
 sdo_aia_model.make_intensity_fields(rad_buffer_obj)
 #%%
 # Use sunpy AIA colormaps
+sdoaia94 = matplotlib.colormaps['sdoaia94']
 sdoaia171 = matplotlib.colormaps['sdoaia171']
+sdoaia131 = matplotlib.colormaps['sdoaia131']
+sdoaia335 = matplotlib.colormaps['sdoaia335']
 #%%
 N = 512
 nframes = 25
@@ -69,15 +72,15 @@ for i in range(nframes):
     data_img = np.array(prji)
     imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 
-    vmin=40
-    vmax=150
+    vmin=0.8
+    vmax=80
     imag[imag == 0] = vmin
 
     pcm = ax.pcolor(X, Y, imag,
                             norm=colors.LogNorm(vmin=vmin, vmax=vmax),
                             #vmin=1e-5,
                             #vmax=1.5e4,
-                            cmap=sdoaia171, shading='auto')
+                            cmap=sdoaia94, shading='auto')
     int_units = str(prji.units)
     #fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
     fig.colorbar(pcm, ax=ax, extend='max', label='DN/pixel * '+'$'+int_units.replace("**", "^")+'$')
