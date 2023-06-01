@@ -7,7 +7,10 @@ from emission_models import uv
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+import matplotlib
 import numpy as np
+
+import sunpy.visualization.colormaps as cm
 
 original_file_path = '../datacubes/flarecs-id.0035.vtk'
 
@@ -36,14 +39,15 @@ thermal_model = xray_bremsstrahlung.ThermalBremsstrahlungModel("temperature", "d
 thermal_model.make_intensity_fields(rad_buffer_obj)
 
 #%%
-channel = 'A193'
+channel = 'A171'
 sdo_aia_model = uv.UVModel("temperature", "density", channel)
 sdo_aia_model.make_intensity_fields(rad_buffer_obj)
 #%%
-
+# Use sunpy AIA colormaps
+sdoaia171 = matplotlib.colormaps['sdoaia171']
 #%%
 N = 512
-nframes = 1
+nframes = 25
 for i in range(nframes):
     norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
     prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
@@ -65,15 +69,15 @@ for i in range(nframes):
     data_img = np.array(prji)
     imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 
-    vmin=3e2
-    vmax=1e3
+    vmin=40
+    vmax=150
     imag[imag == 0] = vmin
 
     pcm = ax.pcolor(X, Y, imag,
                             norm=colors.LogNorm(vmin=vmin, vmax=vmax),
                             #vmin=1e-5,
                             #vmax=1.5e4,
-                            cmap='copper', shading='auto')
+                            cmap=sdoaia171, shading='auto')
     int_units = str(prji.units)
     #fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
     fig.colorbar(pcm, ax=ax, extend='max', label='DN/pixel * '+'$'+int_units.replace("**", "^")+'$')
