@@ -15,48 +15,9 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.buffer import downsample
 from rad_transfer.emission_models import xray_bremsstrahlung
 
-
-#%% Load input data
-downs_factor = 3
-original_file_path = '../datacubes/flarecs-id.0035.vtk'
-downs_file_path = './subs_dataset_' + str(downs_factor) + '.h5'
-
-L_0 = (1.5e8, "m")
-units_override = {
-    "length_unit": L_0,
-    "time_unit": (109.8, "s"),
-    "mass_unit": (8.4375e38, "g"),  # m_0 = \rho_0 * (L_0 ** 3)
-    "velocity_unit": (1.366e6, "m/s"),
-    "temperature_unit": (1.13e8, "K"),
-}
-
-if not os.path.isfile(downs_file_path):
-    ds = yt.load(original_file_path, units_override=units_override,
-                 default_species_fields='ionized', hint='AthenaDataset')
-    # Specifying default_species_fields is required to produce emission_measure field so that PyXSIM thermal
-    # emission model can be applied
-
-    rad_buffer_obj = downsample(ds, rad_fields=True, n=downs_factor)
-else:
-    rad_buffer_obj = yt.load(downs_file_path, hint="YTGridDataset")
-
-#%% Add emission_measure field
-# def _em_field(field, data):
-#     return (
-#         data["gas", "density"]**2.
-#     )
-#
-# rad_buffer_obj.add_field(
-#     name=("gas", "emission_measure"),
-#     function=_em_field,
-#     sampling_type="local",
-#     units="g**2/cm**6",
-#     force_override=True,
-# )
-
-#%% Define projection and imaging
 def proj_and_imag(data, field, norm_vec=[0.0, 0.0, 1.0], resolution=512, vmin=1e-15, vmax=1e6, cmap='inferno',
-                  logscale=True):
+                  logscale=True, figpath='./', frame=None, label=None):
+    plt.ioff()
     prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
                             data,
                             [0.0, 0.5, 0.0],  # center position in code units
@@ -74,7 +35,10 @@ def proj_and_imag(data, field, norm_vec=[0.0, 0.0, 1.0], resolution=512, vmin=1e
 
     #vmin = 0.8
     #vmax = 80
+    if field == 'velocity_divergence':
+        imag = np.abs(imag)
     imag[imag == 0] = vmin
+
 
     if logscale:
         pcm = ax.pcolor(X, Y, imag, norm=colors.LogNorm(vmin=vmin, vmax=vmax), cmap=cmap, shading='auto')
@@ -90,26 +54,80 @@ def proj_and_imag(data, field, norm_vec=[0.0, 0.0, 1.0], resolution=512, vmin=1e
     ax.set_xlabel('x, Mm')
     ax.set_ylabel('y, Mm')
 
-    figpath = '../img/rad_tr_thermal_brem/'
-    plt.savefig(figpath + field +'.png')
+    if label != None:
+        plt.text(40, 135, label, color='white') #bbox=dict(fill=False, color='white', linewidth=0.0))
+    # figpath = '../img/rad_tr_thermal_brem/'
+    if frame == None:
+        if label != None:
+            plt.savefig(figpath + field + '_' + label + '.png')
+        else:
+            plt.savefig(figpath + field + '.png')
+    else:
+        plt.savefig(figpath + field + '_' + str(frame) + '.png')
 
-#%%
-"""
-It is assumed here that the photon energy is fixed at 6 keV
-"""
-rd_thermal_model = xray_bremsstrahlung.ThermalBremsstrahlungModel("temperature", "density", "mass")
-rd_thermal_model.make_intensity_fields(rad_buffer_obj, 6.0, 12.0)
+    return imag
 
-#%% Apply PyXSIM thermal bremsstrahlung to a subsampled datacube
-emin = 6.0
-emax = 12.0
-#px_thermal_model = pyxsim.CIESourceModel("apec", emin, emax, 100, 0.2, binscale='log')
-#px_thermal_model.make_intensity_fields(ds, emin, emax, dist=(1.5e11, "m"))
 
-#%% Produce images
-#proj_and_imag(ds, 'xray_photon_intensity_6.0_12.0_keV', vmin=1e-3, vmax=2e1, cmap='jet', logscale=False)
+if __name__ == '__main__':
+    #%% Load input data
+    downs_factor = 3
+    original_file_path = '../datacubes/flarecs-id.0035.vtk'
+    downs_file_path = './subs_dataset_' + str(downs_factor) + '.h5'
 
-proj_and_imag(rad_buffer_obj, 'xray_intensity_keV', vmin=1e-15, vmax=1e6, cmap='jet')
+    L_0 = (1.5e8, "m")
+    units_override = {
+        "length_unit": L_0,
+        "time_unit": (109.8, "s"),
+        "mass_unit": (8.4375e38, "g"),  # m_0 = \rho_0 * (L_0 ** 3)
+        "velocity_unit": (1.366e6, "m/s"),
+        "temperature_unit": (1.13e8, "K"),
+    }
+
+    if not os.path.isfile(downs_file_path):
+        ds = yt.load(original_file_path, units_override=units_override,
+                     default_species_fields='ionized', hint='AthenaDataset')
+        # Specifying default_species_fields is required to produce emission_measure field so that PyXSIM thermal
+        # emission model can be applied
+
+        rad_buffer_obj = downsample(ds, rad_fields=True, n=downs_factor)
+    else:
+        rad_buffer_obj = yt.load(downs_file_path, hint="YTGridDataset")
+
+#%% Add emission_measure field
+# def _em_field(field, data):
+#     return (
+#         data["gas", "density"]**2.
+#     )
+#
+# rad_buffer_obj.add_field(
+#     name=("gas", "emission_measure"),
+#     function=_em_field,
+#     sampling_type="local",
+#     units="g**2/cm**6",
+#     force_override=True,
+# )
+
+#%% Define projection and imaging
+
+
+    #%%
+    """
+    It is assumed here that the photon energy is fixed at 6 keV
+    """
+    rd_thermal_model = xray_bremsstrahlung.ThermalBremsstrahlungModel("temperature", "density", "mass")
+    rd_thermal_model.make_intensity_fields(rad_buffer_obj, 6.0, 12.0)
+
+    #%% Apply PyXSIM thermal bremsstrahlung to a subsampled datacube
+    emin = 6.0
+    emax = 12.0
+    #px_thermal_model = pyxsim.CIESourceModel("apec", emin, emax, 100, 0.2, binscale='log')
+    #px_thermal_model.make_intensity_fields(ds, emin, emax, dist=(1.5e11, "m"))
+
+    #%% Produce images
+    #proj_and_imag(ds, 'xray_photon_intensity_6.0_12.0_keV', vmin=1e-3, vmax=2e1, cmap='jet', logscale=False)
+
+    proj_and_imag(rad_buffer_obj, 'xray_intensity_keV', vmin=1e-15, vmax=1e6,
+                  cmap='jet', figpath='../img/rad_tr_thermal_brem/')
 
 #%%
 # Try to vectorize n-dim integration
