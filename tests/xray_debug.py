@@ -20,12 +20,12 @@ def proj_and_imag(data, field, norm_vec=[0.0, 0.0, 1.0], resolution=512, vmin=1e
     plt.ioff()
     prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
                             data,
-                            [0.0, 0.5, 0.0],  # center position in code units
+                            [0.1, 0.5, 0.0],  # center position in code units
                             norm_vec,  # normal vector (z axis)
                             1.0,  # width in code units
                             resolution,  # image resolution
                             field,  # respective field that is being projected
-                            north_vector=[0.0, 1.0, 0.0])
+                            north_vector=[-0.7, -0.3, 0.0])
     Mm_len = 1  # ds.length_unit.to('Mm').value
     X, Y = np.mgrid[-0.5 * 150 * Mm_len:0.5 * 150 * Mm_len:complex(0, resolution),
            0 * Mm_len:150 * Mm_len:complex(0, resolution)]
