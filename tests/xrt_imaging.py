@@ -18,13 +18,16 @@ downs_factor = 3
 original_file_path = '../datacubes/flarecs-id.0035.vtk'
 downs_file_path = './subs_dataset_' + str(downs_factor) + '.h5'
 rad_buffer_obj = yt.load(downs_file_path, hint="YTGridDataset")
+
+cut_box = rad_buffer_obj.region(center=[0.0, 0.5, 0.0],
+                                left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 #%%
 channel = 'Be-thin'
 hinode_xrt_model = xrt.XRTModel("temperature", "density", channel)
 hinode_xrt_model.make_intensity_fields(rad_buffer_obj)
 #%%
 xrt_colormap = color_tables.xrt_color_table()
-imag = proj_and_imag(rad_buffer_obj, 'xrt_filter_band', norm_vec=[0.13, 0.1, 0.7],
+imag = proj_and_imag(cut_box, 'xrt_filter_band', norm_vec=[0.13, 0.1, 0.7],
                      vmin=2, vmax=2e3, cmap=xrt_colormap, label=channel)
 
 
