@@ -5,6 +5,7 @@ import os.path
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+import astropy.units as u
 
 import scipy.ndimage as ndimage
 
@@ -12,6 +13,7 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.buffer import downsample
 from rad_transfer.tests.xray_debug import proj_and_imag
 from rad_transfer.emission_models import uv
+from rad_transfer.visualization.colormaps import color_tables
 
 '''
 Plot gradient field of velocity in order to find the minimum of div(v)
@@ -41,17 +43,24 @@ if not os.path.isfile(downs_file_path):
 else:
     rad_buffer_obj = yt.load(downs_file_path, hint="YTGridDataset")
 
+cut_box = rad_buffer_obj.region(center=[0.0, 0.5, 0.0],
+                                left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 #%%
 # Plot the projection of the velocity divergence
 
 # add transparent colormap to further overlay it over the 93 A image
 ncolors = 256
-color_array = plt.get_cmap('YlOrRd_r')(range(ncolors))
-color_array[:,-1] = np.linspace(0.0, 1.0, ncolors)
+color_array = plt.get_cmap('cividis')(range(ncolors))
+color_array[:, -1] = np.linspace(0.0, 1.0, ncolors)
 map_object = LinearSegmentedColormap.from_list(name='inferno_alpha', colors=color_array)
 plt.register_cmap(cmap=map_object)
 
-channel = 'A94'
+color_array = plt.get_cmap('Reds')(range(ncolors))
+color_array[:, -1] = np.linspace(0.0, 1.0, ncolors)
+map_object = LinearSegmentedColormap.from_list(name='inferno_beta', colors=color_array)
+plt.register_cmap(cmap=map_object)
+
+channel = 'A131'
 sdo_aia_model = uv.UVModel('temperature', 'density', channel)
 sdo_aia_model.make_intensity_fields(rad_buffer_obj)
 
@@ -61,9 +70,21 @@ def _convergence(field, data):
     norm = yt.YTQuantity(1.0, "s")
     return (-norm*data["gas", "velocity_divergence"])
 
+def _divergence(field, data):
+    norm = yt.YTQuantity(1.0, "s")
+    return (norm * data["gas", "velocity_divergence"])
+
 rad_buffer_obj.add_field(
     name=('gas', 'convergence'),
     function=_convergence,
+    sampling_type="local",
+    units='dimensionless',
+    force_override=True,
+)
+
+rad_buffer_obj.add_field(
+    name=('gas', 'divergence'),
+    function=_divergence,
     sampling_type="local",
     units='dimensionless',
     force_override=True,
@@ -94,25 +115,40 @@ rad_buffer_obj.add_field(
 #%%
 N = 512
 nframes = 1
+imgcmap = color_tables.aia_color_table(131*u.angstrom)
+plt.ioff()
 for i in range(nframes):
-    norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
+    #norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
+    norm_vec = [0.12, 0.1, 1.0]
+    north_vector = [0.3, 0.7, 0.0]
+    center_pos = [0.0, 0.45, 0.0]
+
     prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-                            rad_buffer_obj,
-                            [0.0, 0.5, 0.0],  # center position in code units
+                            cut_box,
+                            center_pos,  # center position in code units
                             norm_vec,  # normal vector (z axis)
                             1.0,  # width in code units
                             N,  # image resolution
                             'aia_filter_band',  # respective field that is being projected
-                            north_vector=[0.0, 1.0, 0.0])
+                            north_vector=north_vector)
 
     divvprj = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-                            rad_buffer_obj,
-                            [0.0, 0.5, 0.0],  # center position in code units
+                            cut_box,
+                            center_pos,  # center position in code units
                             norm_vec,  # normal vector (z axis)
                             1.0,  # width in code units
                             N,  # image resolution
                             'convergence',  # respective field that is being projected
-                            north_vector=[0.0, 1.0, 0.0])
+                            north_vector=north_vector)
+
+    antidivprj = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+                            cut_box,
+                            center_pos,  # center position in code units
+                            norm_vec,  # normal vector (z axis)
+                            1.0,  # width in code units
+                            N,  # image resolution
+                            'divergence',  # respective field that is being projected
+                            north_vector=north_vector)
 
     Mm_len = 1 # ds.length_unit.to('Mm').value
 
@@ -123,17 +159,18 @@ for i in range(nframes):
     fig, ax = plt.subplots()
     data_img = np.array(prji)
     imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
-    divvmap = np.abs(np.array(divvprj))
+    divvmap = np.array(divvprj)
+    antidivvmap = np.array(antidivprj)
 
-    vmin=0.8
-    vmax=80
+    vmin=1
+    vmax=300
     imag[imag == 0] = vmin
 
     pcm = ax.pcolor(X, Y, imag,
                             norm=colors.LogNorm(vmin=vmin, vmax=vmax),
                             #vmin=1e-5,
                             #vmax=1.5e4,
-                            cmap='Blues_r', shading='auto')
+                            cmap=imgcmap, shading='auto')
 
     ax.pcolor(X, Y, divvmap,
               #norm=colors.LogNorm(vmin=1e5, vmax=2.5e7),
@@ -141,16 +178,22 @@ for i in range(nframes):
               vmax=5e7,
               cmap='inferno_alpha', shading='auto')
 
+    ax.pcolor(X, Y, antidivvmap,
+              #norm=colors.LogNorm(vmin=1e5, vmax=2.5e7),
+              vmin=2.5e7,
+              vmax=5e7,
+              cmap='inferno_beta', shading='auto')
     int_units = str(prji.units)
     #fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
-    fig.colorbar(pcm, ax=ax, extend='max', label='DN/pixel * '+'$'+int_units.replace("**", "^")+'$')
+    cbar = fig.colorbar(pcm, ax=ax, extend='max')
+    cbar.set_label(label='DN pixel$^{-1}$ s$^{-1}$', rotation=270, labelpad=13)
     ax.set_xlabel('x, Mm')
     ax.set_ylabel('y, Mm')
 
     #figpath = '../img/rad_tr_thermal_brem/'
     #plt.savefig(figpath + 'therm_brem_front_view_rad_buff.png')
 
-    ax.set_title('AIA '+channel[1:]+' Å')
+    ax.set_title('Synthetic AIA '+channel[1:]+' Å')
     #plt.show()
     figpath = '../img/velocity_field/mov_'+channel+'/'
     plt.savefig(figpath + 'sdo_aia_'+channel+'_mov_'+str(i).zfill(3)+'.png')
