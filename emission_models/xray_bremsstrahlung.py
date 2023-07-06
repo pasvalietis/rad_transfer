@@ -5,7 +5,7 @@ from pathlib import Path
 from yt.data_objects.static_output import Dataset
 import math
 
-from scipy.special import k0
+from scipy.special import k0, expi
 from scipy.integrate import quad
 
 from astropy import constants as const
@@ -66,54 +66,59 @@ class ThermalBremsstrahlungModel:
         norm_energy = phot_field / (temp*kboltz)
         sizes = np.abs(self.right_edge - self.left_edge)
         idV = mass / dens
-        #for i in range(3):
-        #idV *= ((self.L_0 / self.domain_dimensions[i]) * sizes[i])
+        # for i in range(3):
+        # idV *= ((self.L_0 / self.domain_dimensions[i]) * sizes[i])
 
         dA = 1.
         for i in range(2):
             dA *= ((self.L_0 / self.domain_dimensions[i]) * sizes[i])
 
         # idV = 4.74e17 # mass / dens
-        #gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
-        #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
-        #gaunt *= (np.sqrt(3.) / np.pi)
+        # gaunt = 1.5 #np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        # np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
+        # gaunt *= (np.sqrt(3.) / np.pi)
 
         gf = np.exp(0.5 * norm_energy) * k0(0.5 * norm_energy)
         gf *= (np.sqrt(3.) / np.pi)
 
-        gaunt = 1 #.5 #np.nan_to_num(gf, nan=1.5) #- 7.01*np.ones_like(gf)
+        gaunt = 1  #.5 #np.nan_to_num(gf, nan=1.5) #- 7.01*np.ones_like(gf)
 
         # brm_49 emission field
-        #em_data = (1e8 / 9.26) * np.exp(-norm_energy) / phot_field / np.sqrt(temp)
+        # em_data = (1e8 / 9.26) * np.exp(-norm_energy) / phot_field / np.sqrt(temp)
         # Aschwanden emissivity
         factor = 5.44436678165399e-39
-        au_dist = 14959787070000.0 # One astronomical unit
-        #ORIGINAL
-        #em_data = idV*factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
-        ##em_data *= gaunt
-        #em_data *= 1./(phot_field) # to get flux in photons
-        #em_data *= 1./(hplanck) # to get flux in photons/(s cm^2 keV)
-        #em_data *= 1./(au_dist**2.)
+        au_dist = 14959787070000.0  # One astronomical unit
+        # ORIGINAL
+        # em_data = idV*factor*((dens**2.)/np.sqrt(np.abs(temp)))*np.exp(-np.abs(norm_energy))
+        # #em_data *= gaunt
+        # em_data *= 1./(phot_field) # to get flux in photons
+        # em_data *= 1./(hplanck) # to get flux in photons/(s cm^2 keV)
+        # em_data *= 1./(au_dist**2.)
 
-        def integrand(dens, temp, energy):
-            intd = 8.1e-39 * np.exp(-np.abs((energy*u.keV).to(u.erg).value / temp*kboltz))
-            intd *= (dens * dens) / np.sqrt(temp)
-            #intd *= np.exp(-energy)
-            return intd
+        # def integrand(dens, temp, energy):
+        #     intd = 8.1e-39 * np.exp(-np.abs((energy*u.keV).to(u.erg).value / temp*kboltz))
+        #     intd *= (dens * dens) / np.sqrt(temp)
+        #     #intd *= np.exp(-energy)
+        #     return intd
+        #
+        # def energy_int(dens, temp, emin, emax):
+        #     return quad(lambda energy: integrand(dens, temp, energy), emin, emax)
 
-        def energy_int(dens, temp, emin, emax):
-            return quad(lambda energy: integrand(dens, temp, energy), emin, emax)
-
-        vect_eint = np.vectorize(energy_int)
-        res = vect_eint(dens, temp, emin, emax)[0]
-        em_data = res
+        # vect_eint = np.vectorize(energy_int)
+        # res = vect_eint(dens, temp, emin, emax)[0]
+        # em_data = np.exp(-emin / (temp*u.K).to(u.keV, equivalencies=u.temperature_energy()).value)
+        # em_data -= np.exp(-emax / (temp*u.K).to(u.keV, equivalencies=u.temperature_energy()).value)
+        # em_data = np.abs(em_data)
+        # em_data *= 8.1e-39 * dens*dens * kboltz * temp / (idV*np.sqrt(temp))
 
         # TEST
-        # em_data = 8.1e-39 * np.exp(-np.abs(norm_energy)) * ((dens**2.)/np.sqrt(np.abs(temp))) * dA #* idV
-        # angular_factor = 1. / (4. * np.pi * ((u.rad).to(u.arcsec)) ** 2.)
-        # em_data *= angular_factor / photon_energy_erg.value
-        # print('num cells', num_cells)
-        # ncells = 0
+        energy_int = expi(-(emax*u.keV).to(u.erg).value/(kboltz * temp))
+        energy_int -= expi(-(emin*u.keV).to(u.erg).value/(kboltz * temp))
+        em_data = 5.4e-39 * dens * dens * energy_int / (hplanck * np.sqrt(temp))
+
+        #em_data *= idV / (u.astronomical_unit.in_units('cm')**2.)
+
+        em_data /= (4*np.pi*u.steradian.to(u.arcsec**2))
         return em_data
 
     def make_intensity_fields(self, ds, emin, emax):
@@ -131,7 +136,18 @@ class ThermalBremsstrahlungModel:
                 self.process_data(data, spec_param=spec_param),
                 "photons/cm**3/s/arcsec**2",
             )
-            return ret
+            int_field = ret
+
+            return int_field.in_units("photons/cm**3/s/arcsec**2")
+            #dist = u.astronomical_unit.in_units('cm')
+            #angular_scale = dist / ds.quan(1.0, "radian")
+            #dist_fac = 1.0 / (4.0 * np.pi * dist * dist)
+            #dist_fac = ds.quan((dist_fac / angular_scale**2).v, "rad**-2")
+            #dtype = 'gas'
+            #idV = data[dtype, "density"] / data[dtype, "mass"]
+
+            #int_field = dist_fac * ret * idV
+            #return int_field.in_units("photons/cm**3/s/arcsec**2")
 
         ds.add_field(
             ei_name,
