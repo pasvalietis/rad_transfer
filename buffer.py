@@ -171,7 +171,13 @@ def downsample(obj, rad_fields=False, n=1):
         rds = obj.all_data()
 
     # newName = obj.basename.rsplit(".", 1)[0] + "_ss" + str(n)
-    rad_fields_list = [('gas', 'temperature'), ('gas', 'density'), ('gas', 'emission_measure')]
+    rad_fields_list = [('gas', 'temperature'),
+                       ('gas', 'density'),
+                       ('gas', 'emission_measure'),
+                       ('gas', 'velocity_x'),
+                       ('gas', 'velocity_y'),
+                       ('gas', 'velocity_z')]
+
     # rad_fields_list = obj.derived_field_list
 
     if rad_fields and n == 1:
