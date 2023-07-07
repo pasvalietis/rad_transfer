@@ -31,7 +31,7 @@ class UVModel:
         self.domain_dimensions = ds.domain_dimensions
 
     def process_data(self, chunk):
-        trm_path = '../sdo_aia/aia_temp_response.npy'
+        trm_path = '../instr/sdo_aia/aia_temp_response.npy'
         aia_trm = np.load(trm_path, allow_pickle=True)
 
         channels = {'A94': 0, 'A131': 1, 'A171': 2, 'A193': 3, 'A211': 4, 'A335': 5}
