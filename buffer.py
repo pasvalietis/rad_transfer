@@ -5,6 +5,7 @@ from yt.data_objects.static_output import Dataset
 from yt.fields.magnetic_field import get_magnetic_normalization
 from yt.data_objects.index_subobjects.grid_patch import AMRGridPatch
 from yt.geometry.grid_geometry_handler import GridIndex
+import os
 import numpy as np
 
 
@@ -135,17 +136,6 @@ class RadDataset(Dataset):
 
     # def create_buffer:  # Creating a buffer file in case if original dataset is not a h5 file
 
-
-'''
-Try to write into a downsampled .h5 file only physical fields that we need
-i.e. 
-# coordinates information (domain_dimensions, domain_left_edge, domain_right_edge)
-# ('gas', 'density')
-# ('gas', 'temperature')
-# Later...
-# ('gas', 'magnetic_field')
-'''
-
 def downsample(obj, rad_fields=False, n=1):
     """
     Uses yt fixed resolution function to load a yt object from the target path
@@ -173,20 +163,21 @@ def downsample(obj, rad_fields=False, n=1):
     # newName = obj.basename.rsplit(".", 1)[0] + "_ss" + str(n)
     rad_fields_list = [('gas', 'temperature'),
                        ('gas', 'density'),
-                       ('gas', 'emission_measure'),
                        ('gas', 'velocity_x'),
                        ('gas', 'velocity_y'),
                        ('gas', 'velocity_z')]
 
     # rad_fields_list = obj.derived_field_list
+    src = obj.filename  # write original filename
+    fname = '_'.join(os.path.basename(src).split('/')[-1].split('.')[:-1])
 
     if rad_fields and n == 1:
-        newName = "rad_fields_info_" + str(n)
+        newName = "subs_" + str(n) + "_" + fname
         save = rds.save_as_dataset(filename=newName, fields=rad_fields_list)
         print('\nLoading YTDataContainerDataset...\n')
         nds = load(save, hint="YTDataContainerDataset")
     else:
-        newName = "subs_dataset_" + str(n)
+        newName = "subs_" + str(n) + "_" + fname
 
         if rad_fields:
             save = rds.save_as_dataset(filename=newName, fields=rad_fields_list)
