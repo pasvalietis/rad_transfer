@@ -34,8 +34,8 @@ class UVModel:
         trm_path = '../instr/sdo_aia/aia_temp_response.npy'
         aia_trm = np.load(trm_path, allow_pickle=True)
 
-        channels = {'A94': 0, 'A131': 1, 'A171': 2, 'A193': 3, 'A211': 4, 'A335': 5}
-        ch_ = channels.get(self.channel)
+        channels = {'94': 0, '131': 1, '171': 2, '193': 3, '211': 4, '335': 5}
+        ch_ = channels.get(str(self.channel))
 
         aia_trm_interpf = interpolate.interp1d(
             aia_trm.item()['logt'],
