@@ -47,7 +47,7 @@ def make_filter_image(
 
 
 def proj_and_imag(data, field, norm_vec=[0.0, 0.0, 1.0], north_vector=[-0.7, -0.3, 0.0], resolution=512,
-                  vmin=1e-15, vmax=1e6, cmap='inferno', logscale=True, figpath='./', frame=None, label=None):
+                  vmin=1e-15, vmax=1e6, cmap='inferno', logscale=True, figpath='./prj_plt.png', frame=None, label=None):
     plt.ioff()
 
     prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
@@ -94,7 +94,9 @@ def proj_and_imag(data, field, norm_vec=[0.0, 0.0, 1.0], north_vector=[-0.7, -0.
         if label != None:
             plt.savefig(figpath + field + '_' + label + '.png')
         else:
-            plt.savefig(figpath + field + '.png')
+            plt.savefig(figpath)
+            plt.close()
+            print('fig saved at: ', figpath)
     else:
         plt.savefig(figpath + field + '_' + str(frame) + '.png')
 
