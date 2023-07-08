@@ -12,12 +12,17 @@ import matplotlib
 import numpy as np
 
 # import sunpy.visualization.colormaps as cm
+'''
+Generating images from different instruments
+'''
 
-sys.path.insert(0, '/home/ivan/Study/Astro/solar')
-from rad_transfer.emission_models import xrt
-from rad_transfer.visualization.colormaps import color_tables
+# sys.path.insert(0, '/home/ivan/Study/Astro/solar')
+from emission_models import xrt
+from visualization.colormaps import color_tables
 
-original_file_path = '../datacubes/flarecs-id.0035.vtk'
+instr = 'aia' # Available are Hinode/'xrt', SDO/'aia'
+timestep = 35
+original_file_path = '../datacubes/flarecs-id.00'+str(timestep)+'.vtk'
 
 L_0 = (1.5e8, "m")
 units_override = {
@@ -29,7 +34,7 @@ units_override = {
 }
 
 downs_factor = 3
-downs_file_path = './subs_dataset_' + str(downs_factor) + '.h5'
+downs_file_path = './subs_' + str(downs_factor) + 'flarecs-id_00' + str(timestep) + '.h5'
 
 #%%
 if not os.path.isfile(downs_file_path):
@@ -40,6 +45,7 @@ else:
 
 cut_box = rad_buffer_obj.region(center=[0.0, 0.5, 0.0],
                                 left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
+
 # Create x_ray fields and produce an image
 #%%
 # thermal_model = xray_bremsstrahlung.ThermalBremsstrahlungModel("temperature", "density", "mass")
@@ -59,7 +65,7 @@ hinode_xrt_model.make_intensity_fields(rad_buffer_obj)
 xrt_colormap = color_tables.xrt_color_table()
 #%%
 N = 512
-nframes = 40
+nframes = 1.
 plt.ioff()
 
 for i in range(nframes):
