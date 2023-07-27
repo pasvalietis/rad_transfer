@@ -29,22 +29,26 @@ channel = '131'
 timestep = downs_file_path[-7:-3]
 fname = os.getcwd() + "/" + str(instr) + "_" + str(channel) + '_' + timestep
 
-proj_imag.make_filter_image(subs_ds, instr, channel,
-                            vmin=1, vmax=300, norm_vec=[0.09, 0.0, 1.0],
-                            north_vector=[0., 1., 0.], figpath=fname)
-
-#%%
-directory = '/home/ivan/Study/Astro/solar/rad_transfer/datacubes'
-for filename in os.listdir(directory):
-    f = os.path.join(directory, filename)
-    if os.path.isfile(f) and f.endswith('.h5') and filename.startswith('subs'):
-        print(filename)
-        subs_ds = yt.load(f, units_override=units_override, hint='AthenaDataset')
-        timestep = f[-7:-3]
-        fname = os.getcwd() + "/" + str(instr) + "_" + str(channel) + '_' + timestep
-
-        proj_imag.make_filter_image(subs_ds, instr, channel,
+# proj_imag.make_filter_image(subs_ds, instr, channel,
+#                             vmin=1, vmax=300, norm_vec=[0.09, 0.0, 1.0],
+#                             north_vector=[0., 1., 0.], figpath=fname)
+imag = proj_imag.make_filter_image(subs_ds, instr, channel, resolution=585,
                                     vmin=1, vmax=300, norm_vec=[0.2, 0.0, 1.0],
                                     north_vector=[0., 1., 0.], figpath=fname)
-        #ds = yt.load(f, units_override=units_override, hint='AthenaDataset')
-        #rad_buffer_obj = downsample(ds, rad_fields=True, n=downs_factor)
+
+
+#%%
+# directory = '/home/ivan/Study/Astro/solar/rad_transfer/datacubes'
+# for filename in os.listdir(directory):
+#     f = os.path.join(directory, filename)
+#     if os.path.isfile(f) and f.endswith('.h5') and filename.startswith('subs'):
+#         print(filename)
+#         subs_ds = yt.load(f, units_override=units_override, hint='AthenaDataset')
+#         timestep = f[-7:-3]
+#         fname = os.getcwd() + "/" + str(instr) + "_" + str(channel) + '_' + timestep
+#
+#         proj_imag.make_filter_image(subs_ds, instr, channel,
+#                                     vmin=1, vmax=300, norm_vec=[0.2, 0.0, 1.0],
+#                                     north_vector=[0., 1., 0.], figpath=fname)
+#         #ds = yt.load(f, units_override=units_override, hint='AthenaDataset')
+#         #rad_buffer_obj = downsample(ds, rad_fields=True, n=downs_factor)
