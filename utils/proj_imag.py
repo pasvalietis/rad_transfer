@@ -33,10 +33,16 @@ class SyntheticFilterImage():
         """
         :param dataset: Path of the downsampled dataset or a dataset itself
         """
+
+        self.box = None
+
         if isinstance(dataset, str):
             self.data = yt.load(dataset, units_override=units_override, hint=hint)
         elif isinstance(dataset, yt.data_objects.static_output.Dataset):
             self.data = dataset
+        elif isinstance(dataset, yt.data_objects.selection_objects.region.YTRegion):
+            self.data = dataset.ds
+            self.box = dataset
 
         self.instr = instr
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
@@ -46,7 +52,11 @@ class SyntheticFilterImage():
                               'north_vector': (-0.7, -0.3, 0.0)}
         self.__imag_field = None
         self.image = None
-        self.domain_width = self.data.domain_width.in_units("cm").to_astropy() #convert unyt to astropy.units
+
+        if self.box:
+            self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
+        else:
+            self.domain_width = self.data.domain_width.in_units("cm").to_astropy() #convert unyt to astropy.units
 
         self.plot_settings = {'resolution': 512,
                               'vmin': 1e-15,
@@ -95,8 +105,13 @@ class SyntheticFilterImage():
         if view_settings:
             self.view_settings = view_settings
 
+        if self.box:
+            region = self.box
+        else:
+            region = self.data
+
         prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-            self.data,
+            region,
             [0.0, 0.5, 0.0],  # center position in code units
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
             width=self.data.domain_width[0].value,  # width in code units
@@ -104,10 +119,20 @@ class SyntheticFilterImage():
             item=self.__imag_field,  # respective field that is being projected
             north_vector=self.view_settings['north_vector'])
 
-        self.image = np.array(prji)
+        self.image = np.rot90(np.array(prji), k=3)
         # return self.image
+        self.image_shift = kwargs.get('image_shift', None)  # (xshift, yshift)
+
+        if self.image_shift:
+            self.image = np.roll(self.image, (self.image_shift[0],
+                                              self.image_shift[1]), axis=(1, 0))
+        #if kwargs.get('shift_imag', 'EIT')
+
+        # Fill background
+        self.image[self.image == 0] = self.image.min() + 10
 
     def make_synthetic_map(self, **kwargs):
+
         """
         Creates a synthetic map object that can be loaded/edited with sunpy
         :return:
@@ -117,12 +142,12 @@ class SyntheticFilterImage():
         # Define header parameters for the synthetic image
 
         # Coordinates can be passed from sunpy maps that comparisons are made width
-        self.reference_coord = SkyCoord(0*u.arcsec, 0*u.arcsec,
+        self.reference_coord = kwargs.get('reference_coord', SkyCoord(0*u.arcsec, 0*u.arcsec,
                                    obstime='2013-10-28',
                                    observer='earth',  # Temporarily 1 AU away
-                                   frame=frames.Helioprojective)
+                                   frame=frames.Helioprojective))
 
-        self.reference_pixel =  kwargs.get('reference_pixel', u.Quantity([(data.shape[1] - 1)/2.,
+        self.reference_pixel = kwargs.get('reference_pixel', u.Quantity([(data.shape[1] - 1)/2.,
             (data.shape[0] - 1)/2.], u.pixel))  # Reference pixel along each axis: Defaults to the center of data array
 
         asec2cm = _radius_from_angular_radius(1. * u.arcsec, 1 * u.AU).to(u.cm)  # centimeters per arcsecond at 1 AU
