@@ -77,7 +77,7 @@ for i in range(4):
 
     xrt_synthetic = synt_img(subs_ds, instr, channel)
     synth_plot_settings = {'resolution': xrt_img_rot.shape[0]}
-    synth_view_settings = {'normal_vector': [0.1*(i+1), 0.2, -np.sqrt(1.-(0.1*(i+1)))],
+    synth_view_settings = {'normal_vector': [0.1*(i+1), 0.4, -np.sqrt(1.-(0.1*(i+1)))],
                            'north_vector': [0.0, 1.0, 0.0]}
     xrt_synthetic.proj_and_imag(plot_settings=synth_plot_settings, view_settings=synth_view_settings)
 
@@ -90,7 +90,7 @@ for i in range(4):
     '''
 
     zi = ProfilePlot([160, 175], [160, 5], 500, xrt_img_rot)
-    prof2 = ProfilePlot([300, 210], [50, 210], 500, synth_imag_rot)
+    prof2 = ProfilePlot([300, 170], [50, 170], 500, synth_imag_rot)
 
     '''
     Plot obs and synthetic image
