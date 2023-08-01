@@ -159,8 +159,12 @@ class SyntheticFilterImage():
         self.scale = kwargs.get('scale', u.Quantity(scale_, u.arcsec/u.pixel))
         self.telescope = kwargs.get('telescope', 'EIT')
         self.observatory = kwargs.get('observatory', 'SOHO')
-        self.detector = kwargs.get('detector', None)
-        self.wavelength = int(self.channel) * u.angstrom
+        self.detector = kwargs.get('detector', 'Synthetic')
+        self.instrument = kwargs.get('instrument', None)
+        if isinstance(self.channel, int):
+            self.wavelength = int(self.channel) * u.angstrom
+        else:
+            self.wavelength = None
         self.exposure = kwargs.get('exposure', None)
         self.unit = kwargs.get('unit', None)
 
@@ -170,7 +174,8 @@ class SyntheticFilterImage():
                                      reference_pixel=self.reference_pixel,
                                      scale=self.scale,
                                      telescope=self.telescope,
-                                     instrument=self.instr,
+                                     detector=self.detector,
+                                     instrument=self.instrument,
                                      observatory=self.observatory,
                                      wavelength=self.wavelength,
                                      exposure=self.exposure,
