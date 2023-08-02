@@ -1,19 +1,26 @@
-import yt
 import numpy as np
 import sys
 import os.path
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+
 import astropy.units as u
+from astropy.coordinates import SkyCoord
 
 import scipy.ndimage as ndimage
+import sunpy.map
 
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
-from rad_transfer.buffer import downsample
 from rad_transfer.tests.xray_debug import proj_and_imag
 from rad_transfer.emission_models import uv
 from rad_transfer.visualization.colormaps import color_tables
+
+# Import synthetic image manipulation tools
+import yt
+sys.path.insert(0, '/home/ivan/Study/Astro/solar')
+from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
+from rad_transfer.emission_models import uv, xrt
 
 '''
 Plot gradient field of velocity in order to find the minimum of div(v)
@@ -23,7 +30,8 @@ Plot gradient field of velocity in order to find the minimum of div(v)
 #%% Load input data
 downs_factor = 3
 original_file_path = '../datacubes/flarecs-id.0035.vtk'
-downs_file_path = './subs_dataset_' + str(downs_factor) + '.h5'
+#downs_file_path = './subs_dataset_' + str(downs_factor) + '.h5'
+downs_file_path = '/home/ivan/Study/Astro/solar/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
 
 L_0 = (1.5e10, "cm")
 units_override = {
@@ -34,21 +42,34 @@ units_override = {
     "temperature_unit": (1.13e8, "K"),
 }
 
-if not os.path.isfile(downs_file_path):
-    ds = yt.load(original_file_path, units_override=units_override,
-                 default_species_fields='ionized', hint='AthenaDataset')
-    # Specifying default_species_fields is required to produce emission_measure field so that PyXSIM thermal
-    # emission model can be applied
-    rad_buffer_obj = downsample(ds, rad_fields=True, n=downs_factor)
-else:
-    rad_buffer_obj = yt.load(downs_file_path, hint="YTGridDataset")
+# if not os.path.isfile(downs_file_path):
+#     ds = yt.load(original_file_path, units_override=units_override,
+#                  default_species_fields='ionized', hint='AthenaDataset')
+#     # Specifying default_species_fields is required to produce emission_measure field so that PyXSIM thermal
+#     # emission model can be applied
+#     rad_buffer_obj = downsample(ds, rad_fields=True, n=downs_factor)
+# else:
+
+rad_buffer_obj = yt.load(downs_file_path, hint="YTGridDataset")
 
 cut_box = rad_buffer_obj.region(center=[0.0, 0.5, 0.0],
                                 left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
+
+'''
+Import AIA map
+'''
+aia_imag_lvl1 = sunpy.map.Map('./aia_data/aia.lev1.131A_2011-03-07T180909.62Z.image_lev1.fits')
+aia_map = aia_imag_lvl1
+
+roi_bottom_left = SkyCoord(Tx=-500*u.arcsec, Ty=200*u.arcsec, frame=aia_map.coordinate_frame)
+roi_top_right = SkyCoord(Tx=-150*u.arcsec, Ty=550*u.arcsec, frame=aia_map.coordinate_frame)
+cusp_submap = aia_map.submap(roi_bottom_left, top_right=roi_top_right)
+cusp_submap.data[cusp_submap.data <= 0] = cusp_submap.data.min()+20
+
 #%%
 # Plot the projection of the velocity divergence
-
 # add transparent colormap to further overlay it over the 93 A image
+
 ncolors = 256
 color_array = plt.get_cmap('cividis')(range(ncolors))
 color_array[:, -1] = np.linspace(0.0, 1.0, ncolors)
@@ -60,9 +81,37 @@ color_array[:, -1] = np.linspace(0.0, 1.0, ncolors)
 map_object = LinearSegmentedColormap.from_list(name='inferno_beta', colors=color_array)
 plt.register_cmap(cmap=map_object)
 
-channel = 'A131'
+instr = 'aia'  # aia or xrt
+channel = 131
 sdo_aia_model = uv.UVModel('temperature', 'density', channel)
 sdo_aia_model.make_intensity_fields(rad_buffer_obj)
+
+timestep = downs_file_path[-7:-3]
+fname = os.getcwd() + "/" + str(instr) + "_" + str(channel) + '_' + timestep
+
+aia_synthetic = synt_img(cut_box, instr, channel)
+samp_resolution = 584
+obs_scale = [0.6, 0.6]*(u.arcsec/u.pixel)
+reference_pixel = u.Quantity([833.5, -333.5], u.pixel)
+reference_coord = cusp_submap.reference_coordinate
+
+img_tilt = -23*u.deg
+
+synth_plot_settings = {'resolution': samp_resolution}
+synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],
+                       'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
+
+aia_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
+                            view_settings=synth_view_settings,
+                            image_shift=[-52, 105],
+                            bkg_fill=10)
+
+synth_map = aia_synthetic.make_synthetic_map(obstime='2013-10-28',
+                                             observer='earth',
+                                             detector='Synthetic AIA',
+                                             scale=obs_scale,
+                                             reference_coord=reference_coord,
+                                             reference_pixel=reference_pixel)  # .rotate(angle=0.0 * u.deg)
 
 #cmap1 = matplotlib.colors.ListedColormap(['none', 'red'])
 #%%
@@ -173,15 +222,15 @@ for i in range(nframes):
                             cmap=imgcmap, shading='auto')
 
     ax.pcolor(X, Y, divvmap,
-              #norm=colors.LogNorm(vmin=1e5, vmax=2.5e7),
-              vmin=2.5e7,
-              vmax=5e7,
+              norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
+              #vmin=2.5e7,
+              #vmax=5e7,
               cmap='inferno_alpha', shading='auto')
 
     ax.pcolor(X, Y, antidivvmap,
-              #norm=colors.LogNorm(vmin=1e5, vmax=2.5e7),
-              vmin=2.5e7,
-              vmax=5e7,
+              norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
+              #vmin=2.5e7,
+              #vmax=5e7,
               cmap='inferno_beta', shading='auto')
     int_units = str(prji.units)
     #fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
@@ -193,7 +242,7 @@ for i in range(nframes):
     #figpath = '../img/rad_tr_thermal_brem/'
     #plt.savefig(figpath + 'therm_brem_front_view_rad_buff.png')
 
-    ax.set_title('Synthetic AIA '+channel[1:]+' Å')
+    ax.set_title('Synthetic AIA '+str(channel)+' Å')
     #plt.show()
-    figpath = '../img/velocity_field/mov_'+channel+'/'
-    plt.savefig(figpath + 'sdo_aia_'+channel+'_mov_'+str(i).zfill(3)+'.png')
+    figpath = '/home/ivan/Study/Astro/solar/rad_transfer/tests/imag/velocity_field/'
+    plt.savefig(figpath + 'sdo_aia_'+str(channel)+'_mov_'+str(i).zfill(3)+'.png')
