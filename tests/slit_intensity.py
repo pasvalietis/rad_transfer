@@ -20,6 +20,29 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.emission_models import uv, xrt
 
+export_pm = 'png'
+
+if export_pm == 'tex':
+    import matplotlib
+    params = {
+        'text.latex.preamble': ['\\usepackage{gensymb}'],
+        'image.origin': 'lower',
+        'image.interpolation': 'nearest',
+        'image.cmap': 'gray',
+        'axes.grid': False,
+        #'savefig.dpi': 150,  # to adjust notebook inline plot size
+        'axes.labelsize': 14, # fontsize for x and y labels (was 10)
+        'axes.titlesize': 14,
+        'font.size': 14, # was 10
+        #'legend.fontsize': 6, # was 10
+        'xtick.labelsize': 14,
+        'ytick.labelsize': 14,
+        'text.usetex': True,
+        'figure.figsize': [3.39, 2.10],
+        'font.family': 'sans',
+    }
+    matplotlib.rcParams.update(params)
+
 #%%
 '''
 Import AIA image
@@ -80,7 +103,8 @@ synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],
 
 aia_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
                             view_settings=synth_view_settings,
-                            image_shift=[-52, 105])
+                            image_shift=[-52, 105],
+                            bkg_fill=10)
 
 #Import scale from an AIA image:
 synth_map = aia_synthetic.make_synthetic_map(obstime='2013-10-28',
@@ -112,11 +136,10 @@ ax1 = fig.add_subplot(gs[:2, :2], projection=cusp_submap)
 cusp_submap.plot_settings['norm'] = colors.LogNorm(10, cusp_submap.max())
 #cusp_submap.plot_settings['cmap'] =
 cusp_submap.plot(axes=ax1)
-# plt.colorbar()  # (cax=cax, orientation='vertical')
-#ax1.plot_coord(intensity_coords)
-#ax1.plot_coord(line_coords[0], marker="o", color="blue", label="start")
-#ax1.plot_coord(line_coords[1], marker="o", color="green", label="end")
-#ax1.legend()
+ax1.grid(False)
+stonyhurst_grid = cusp_submap.draw_grid(axes=ax1, system='stonyhurst', annotate=False)
+cusp_submap.draw_limb()
+
 
 line_coords = SkyCoord([-335, -380], [380, 480], unit=(u.arcsec, u.arcsec),
                        frame=cusp_submap.coordinate_frame)  # [x1, x2], [y1, y2]
@@ -153,10 +176,14 @@ ax1.plot_coord(intensity_coords2, color='red', linewidth=0.75)
 #ax2 = fig.add_subplot(221, projection=synth_map)
 ax2 = fig.add_subplot(gs[:2, 2:], projection=synth_map)
 #cbar.set_label('DN pixel$^{-1}$ s$^{-1}$', rotation=270, labelpad=13)
-synth_map.plot_settings['norm'] = colors.LogNorm(10, 10*synth_map.max())
+synth_map.plot_settings['norm'] = colors.LogNorm(10, cusp_submap.max())
 synth_map.plot_settings['cmap'] = aia_map.plot_settings['cmap']
 
 synth_map.plot(axes=ax2)
+ax2.grid(False)
+stonyhurst_grid = synth_map.draw_grid(axes=ax2, system='stonyhurst', annotate=False)
+synth_map.draw_limb()
+
 ax2.text(260, 30,
     'norm: '+str(list(float(i) for i in ["%.2f" % elem for elem in synth_view_settings['normal_vector']])) +
     '\n'+'north: '+str(list(float(i) for i in ["%.2f" % elem for elem in synth_view_settings['north_vector']])),
@@ -181,7 +208,7 @@ ax3.set_ylabel('$I$, [DN cm$^5$ pix$^{-1}$ s$^{-1}$]')
 ax3.set_yscale('log')
 ax3.legend(frameon=False)
 #plt.tight_layout()
-plt.savefig('slit_profiles.png')
+plt.savefig('aia_slit_profiles.png')
 
 # # # sdoaia131 = matplotlib.colormaps['sdoaia131']
 # #
