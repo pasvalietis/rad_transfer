@@ -2,6 +2,7 @@ import yt
 import os
 import sys
 import numpy as np
+from scipy import ndimage, datasets
 
 import textwrap
 
@@ -120,6 +121,12 @@ class SyntheticFilterImage():
             north_vector=self.view_settings['north_vector'])
 
         self.image = np.rot90(np.array(prji), k=3)
+
+        self.image_zoom = kwargs.get('image_zoom', None)
+
+        if self.image_zoom:
+            self.image = self.zoom_out(self.image, self.image_zoom)
+
         # return self.image
         self.image_shift = kwargs.get('image_shift', None)  # (xshift, yshift)
 
@@ -129,7 +136,23 @@ class SyntheticFilterImage():
         #if kwargs.get('shift_imag', 'EIT')
 
         # Fill background
-        self.image[self.image == 0] = self.image.min() + 10
+        self.bkg_fill = kwargs.get('bkg_fill', None)
+        if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
+
+    def zoom_out(self, img, scale):
+        new_arr = np.ones_like(img) * img.min()
+        if scale >= 1:
+            raise ValueError("Scale parameter has to be lower than 1")
+        zoomed_img = ndimage.zoom(img, scale)  # scale<1
+
+        # fill the central part of the new image
+        y, x = new_arr.shape
+        cropx = (zoomed_img.shape[0])
+        cropy = (zoomed_img.shape[1])
+        startx = (x - cropx) // 2
+        starty = (y - cropy) // 2
+        new_arr[starty:starty + cropy, startx:startx + cropx] = zoomed_img
+        return new_arr
 
     def make_synthetic_map(self, **kwargs):
 
