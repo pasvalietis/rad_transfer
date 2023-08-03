@@ -2,7 +2,7 @@ import yt
 import os
 import sys
 import numpy as np
-from scipy import ndimage, datasets
+from scipy import ndimage #, datasets
 
 import textwrap
 
