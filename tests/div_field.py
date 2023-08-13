@@ -22,6 +22,32 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.emission_models import uv, xrt
 
+export_pm = 'pgf'
+
+if export_pm == 'pgf':
+    import matplotlib
+    matplotlib.use("pgf")
+    matplotlib.rcParams.update({
+        "pgf.texsystem": "pdflatex",
+        'font.family': 'sans',
+        'text.usetex': True,
+        'pgf.rcfonts': False,
+        'axes.grid': False,
+        'savefig.dpi': 150,  # to adjust notebook inline plot size
+        'axes.labelsize': 10,  # fontsize for x and y labels (was 10)
+        'axes.titlesize': 10,
+        'font.size': 10,  # was 10
+        # 'legend.fontsize': 6, # was 10
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'text.usetex': True,
+        'figure.figsize': [3.39, 2.10],
+        'font.family': 'sans',
+    })
+
+
+
+
 '''
 Plot gradient field of velocity in order to find the minimum of div(v)
 '''
@@ -71,7 +97,7 @@ cusp_submap.data[cusp_submap.data <= 0] = cusp_submap.data.min()+20
 # add transparent colormap to further overlay it over the 93 A image
 
 ncolors = 256
-color_array = plt.get_cmap('cividis')(range(ncolors))
+color_array = plt.get_cmap('RdPu_r')(range(ncolors))
 color_array[:, -1] = np.linspace(0.0, 1.0, ncolors)
 map_object = LinearSegmentedColormap.from_list(name='inferno_alpha', colors=color_array)
 plt.register_cmap(cmap=map_object)
@@ -95,11 +121,19 @@ obs_scale = [0.6, 0.6]*(u.arcsec/u.pixel)
 reference_pixel = u.Quantity([833.5, -333.5], u.pixel)
 reference_coord = cusp_submap.reference_coordinate
 
+img_tilt = 23*u.deg
+
+synth_plot_settings = {'resolution': samp_resolution}
+synth_view_settings = {'normal_vector': [-0.12, 0.05, 0.916],
+                       'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
+
+'''
 img_tilt = -23*u.deg
 
 synth_plot_settings = {'resolution': samp_resolution}
 synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],
                        'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
+'''
 
 aia_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
                             view_settings=synth_view_settings,
@@ -166,83 +200,102 @@ N = 512
 nframes = 1
 imgcmap = color_tables.aia_color_table(131*u.angstrom)
 plt.ioff()
-for i in range(nframes):
-    #norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
-    norm_vec = [0.12, 0.1, 1.0]
-    north_vector = [0.3, 0.7, 0.0]
-    center_pos = [0.0, 0.45, 0.0]
+#for i in range(nframes):
+#norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
+norm_vec = synth_view_settings['normal_vector']  # [0.12, 0.1, 1.0]
+north_vector = synth_view_settings['north_vector']  # [0.3, 0.7, 0.0]
+center_pos = [0.0, 0.5, 0.0]
 
-    prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-                            cut_box,
-                            center_pos,  # center position in code units
-                            norm_vec,  # normal vector (z axis)
-                            1.0,  # width in code units
-                            N,  # image resolution
-                            'aia_filter_band',  # respective field that is being projected
-                            north_vector=north_vector)
+prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+                        cut_box,
+                        center_pos,  # center position in code units
+                        norm_vec,  # normal vector (z axis)
+                        1.0,  # width in code units
+                        N,  # image resolution
+                        'aia_filter_band',  # respective field that is being projected
+                        north_vector=north_vector)
 
-    divvprj = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-                            cut_box,
-                            center_pos,  # center position in code units
-                            norm_vec,  # normal vector (z axis)
-                            1.0,  # width in code units
-                            N,  # image resolution
-                            'convergence',  # respective field that is being projected
-                            north_vector=north_vector)
+divvprj = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+                        cut_box,
+                        center_pos,  # center position in code units
+                        norm_vec,  # normal vector (z axis)
+                        1.0,  # width in code units
+                        N,  # image resolution
+                        'convergence',  # respective field that is being projected
+                        north_vector=north_vector)
 
-    antidivprj = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
-                            cut_box,
-                            center_pos,  # center position in code units
-                            norm_vec,  # normal vector (z axis)
-                            1.0,  # width in code units
-                            N,  # image resolution
-                            'divergence',  # respective field that is being projected
-                            north_vector=north_vector)
+antidivprj = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+                        cut_box,
+                        center_pos,  # center position in code units
+                        norm_vec,  # normal vector (z axis)
+                        1.0,  # width in code units
+                        N,  # image resolution
+                        'divergence',  # respective field that is being projected
+                        north_vector=north_vector)
 
-    Mm_len = 1 # ds.length_unit.to('Mm').value
+Mm_len = 1 # ds.length_unit.to('Mm').value
 
-    X, Y = np.mgrid[-0.5*150*Mm_len:0.5*150*Mm_len:complex(0, N),
-           0*Mm_len:150*Mm_len:complex(0, N)]
+X, Y = np.mgrid[-0.5*150*Mm_len:0.5*150*Mm_len:complex(0, N),
+       0*Mm_len:150*Mm_len:complex(0, N)]
 
-    #%%
-    fig, ax = plt.subplots()
-    data_img = np.array(prji)
-    imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
-    divvmap = np.array(divvprj)
-    antidivvmap = np.array(antidivprj)
+#%%
+#fig, ax = plt.subplots()
+xsize, ysize = 5.5, 4.5
+fig, ax = plt.subplots(1, 1, figsize=(xsize, ysize), dpi=140)
+data_img = np.array(prji)
+imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
+divvmap = np.array(divvprj)
+antidivvmap = np.array(antidivprj)
 
-    vmin=1
-    vmax=300
-    imag[imag == 0] = vmin
+vmin=10
+vmax=914.910
+imag[imag == 0] = vmin
 
-    pcm = ax.pcolor(X, Y, imag,
-                            norm=colors.LogNorm(vmin=vmin, vmax=vmax),
-                            #vmin=1e-5,
-                            #vmax=1.5e4,
-                            cmap=imgcmap, shading='auto')
+pcm = ax.pcolor(X, Y, imag,
+                        norm=colors.LogNorm(vmin=vmin, vmax=vmax),
+                        #vmin=1e-5,
+                        #vmax=1.5e4,
+                        cmap=imgcmap, shading='auto', rasterized=True)
 
-    ax.pcolor(X, Y, divvmap,
-              norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
-              #vmin=2.5e7,
-              #vmax=5e7,
-              cmap='inferno_alpha', shading='auto')
+ax.pcolor(X, Y, divvmap,
+          #norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
+          vmin=5e7,
+          vmax=2e8,
+          cmap='inferno_alpha', shading='auto', rasterized=True)
 
-    ax.pcolor(X, Y, antidivvmap,
-              norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
-              #vmin=2.5e7,
-              #vmax=5e7,
-              cmap='inferno_beta', shading='auto')
-    int_units = str(prji.units)
-    #fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
-    cbar = fig.colorbar(pcm, ax=ax, extend='max')
-    cbar.set_label(label='DN pixel$^{-1}$ s$^{-1}$', rotation=270, labelpad=13)
-    ax.set_xlabel('x, Mm')
-    ax.set_ylabel('y, Mm')
+ax.pcolor(X, Y, antidivvmap,
+          #norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
+          vmin=3e7,
+          vmax=7e7,
+          cmap='inferno_beta', shading='auto', rasterized=True)
 
-    #figpath = '../img/rad_tr_thermal_brem/'
-    #plt.savefig(figpath + 'therm_brem_front_view_rad_buff.png')
+ax.annotate("Y Point, div v > 0",
+            xy=(0, 70), xycoords='data', color='magenta',
+            xytext=(20, 90), textcoords='data',
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color='magenta'))
 
-    ax.set_title('Synthetic AIA '+str(channel)+' Å')
-    #plt.show()
-    figpath = '/home/ivan/Study/Astro/solar/rad_transfer/tests/imag/velocity_field/'
-    plt.savefig(figpath + 'sdo_aia_'+str(channel)+'_mov_'+str(i).zfill(3)+'.png')
+ax.annotate("X Point, div v > 0",
+            xy=(-21, 145), xycoords='data', color='magenta',
+            xytext=(20, 130), textcoords='data',
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color='magenta'))
+
+ax.annotate("TS, div v < 0",
+            xy=(0, 85), xycoords='data', color='red',
+            xytext=(20, 110), textcoords='data',
+            arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color='red'))
+
+int_units = str(prji.units)
+#fig.colorbar(pcm, ax=ax, extend='max', label='$'+int_units.replace("**", "^")+'$')
+cbar = fig.colorbar(pcm, ax=ax, extend='max')
+cbar.set_label(label='DN cm$^5$ pix$^{-1}$ s$^{-1}$', rotation=270, labelpad=13)
+ax.set_xlabel('$x$, Mm')
+ax.set_ylabel('$y$, Mm')
+ax.set_aspect('equal')
+
+#figpath = '../img/rad_tr_thermal_brem/'
+#plt.savefig(figpath + 'therm_brem_front_view_rad_buff.png')
+
+ax.set_title('$div(v)$') #'Synthetic AIA '+str(channel)+' Å')
+#plt.show()
+figpath = '/home/ivan/Study/Astro/solar/rad_transfer/tests/imag/velocity_field/'
+plt.savefig(figpath + 'sdo_aia_'+str(channel)+'_mov_'+'.pgf', dpi=140)  # +str(i).zfill(3)
