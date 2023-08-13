@@ -20,7 +20,7 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.emission_models import uv, xrt
 
-export_pm = 'png'
+export_pm = 'tex'
 
 if export_pm == 'tex':
     import matplotlib
@@ -123,7 +123,7 @@ Plot obs and synthetic image
 '''
 
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
+#%%
 #fig = plt.figure(figsize=(10, 4))
 fig = plt.figure(constrained_layout=True, figsize=(10, 6))
 fig.set_tight_layout(True)
@@ -184,14 +184,13 @@ ax2.grid(False)
 stonyhurst_grid = synth_map.draw_grid(axes=ax2, system='stonyhurst', annotate=False)
 synth_map.draw_limb()
 
-ax2.text(260, 30,
+ax2.text(200, 30,
     'norm: '+str(list(float(i) for i in ["%.2f" % elem for elem in synth_view_settings['normal_vector']])) +
     '\n'+'north: '+str(list(float(i) for i in ["%.2f" % elem for elem in synth_view_settings['north_vector']])),
     style='italic', color='white')
 
 ax2.plot_coord(intensity_coords_, color='magenta', linewidth=0.75)
 ax2.plot_coord(intensity_coords2_, color='red', linewidth=0.75)
-
 
 plt.colorbar()
 
@@ -206,9 +205,9 @@ ax3.set_xlabel("Angular distance along slit [arcsec]")
 #ax3.set_ylabel(f"Intensity [{cusp_submap.unit}]")
 ax3.set_ylabel('$I$, [DN cm$^5$ pix$^{-1}$ s$^{-1}$]')
 ax3.set_yscale('log')
-ax3.legend(frameon=False)
+ax3.legend(frameon=False, fontsize=10)
 #plt.tight_layout()
-plt.savefig('aia_slit_profiles.png')
+plt.savefig('aia_slit_profiles.pgf')
 
 # # # sdoaia131 = matplotlib.colormaps['sdoaia131']
 # #
