@@ -165,7 +165,11 @@ def downsample(obj, rad_fields=False, n=1):
                        ('gas', 'density'),
                        ('gas', 'velocity_x'),
                        ('gas', 'velocity_y'),
-                       ('gas', 'velocity_z')]
+                       ('gas', 'velocity_z'),
+                       ('gas', 'magnetic_field_x'),
+                       ('gas', 'magnetic_field_y'),
+                       ('gas', 'magnetic_field_z')]
+    #TODO: Implement this as a Radcube object that has units_override class
 
     # rad_fields_list = obj.derived_field_list
     src = obj.filename  # write original filename
