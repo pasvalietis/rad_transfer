@@ -17,7 +17,7 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.emission_models import uv, xrt
 
-export_pm = 'png'
+export_pm = 'tex'
 if export_pm == 'pgf':
     import matplotlib
     matplotlib.use("pgf")
@@ -164,12 +164,12 @@ line_coords_ = SkyCoord([850, 915], [-530, -550], unit=(u.arcsec, u.arcsec),
 intensity_coords_ = sunpy.map.pixelate_coord_path(synth_map, line_coords_)
 intensity_ = sunpy.map.sample_at_coords(synth_map, intensity_coords_)
 
-line_coords2 = SkyCoord([850, 880], [-580, -480], unit=(u.arcsec, u.arcsec),
+line_coords2 = SkyCoord([860, 890], [-580, -480], unit=(u.arcsec, u.arcsec),
                        frame=cusp_submap.coordinate_frame)  # [x1, x2], [y1, y2]
 intensity_coords2 = sunpy.map.pixelate_coord_path(cusp_submap, line_coords2)
 intensity2 = sunpy.map.sample_at_coords(cusp_submap, intensity_coords2)
 
-line_coords2_ = SkyCoord([850, 880], [-580, -480], unit=(u.arcsec, u.arcsec),
+line_coords2_ = SkyCoord([860, 890], [-580, -480], unit=(u.arcsec, u.arcsec),
                         frame=synth_map.coordinate_frame)  # [x1, x2], [y1, y2]
 intensity_coords2_ = sunpy.map.pixelate_coord_path(synth_map, line_coords2_)
 intensity2_ = sunpy.map.sample_at_coords(synth_map, intensity_coords2_)
@@ -205,17 +205,19 @@ plt.colorbar()
 
 # *****************
 ax3 = fig.add_subplot(gs[2, :])
-ax3.plot(angular_separation, intensity, linewidth=0.65, color='limegreen', label='XRT')
-ax3.plot(angular_separation_, intensity_, linewidth=0.65, color='limegreen', linestyle='--', label='Synthetic')
-ax3.plot(angular_separation2, intensity2, linewidth=0.65, color='blue')
-ax3.plot(angular_separation2_, intensity2_, linewidth=0.65, color='blue', linestyle='--')
+ax3.plot(angular_separation, intensity, linewidth=0.65, color='limegreen')
+ax3.plot(angular_separation_, intensity_, linewidth=0.65, color='limegreen', linestyle='--')
+ax3.plot(angular_separation2, intensity2, linewidth=0.65, color='blue', label='XRT')
+ax3.plot(angular_separation2_, intensity2_, linewidth=0.65, color='blue', linestyle='--', label='Synthetic')
 ax3.set_ylabel('$I$, [DN cm$^5$ pix$^{-1}$ s$^{-1}$]')
+ax3.set_xlabel("Angular distance along slit [arcsec]")
 ax3.set_yscale('log')
+ax3.legend(frameon=False, fontsize=10, loc ="upper right")
 #ax3.legend(frameon=False)
 #a3.text()
 
 
-plt.savefig('xrt_brightness_profile_'+str(0)+'.'+str(export_pm))
+plt.savefig('xrt_brightness_profile_'+str(0)+'.pgf') #+str(export_pm))
 
 
 
