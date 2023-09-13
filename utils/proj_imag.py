@@ -4,24 +4,34 @@ import sys
 import numpy as np
 from scipy import ndimage #, datasets
 
-import textwrap
-
 import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-from sunpy.map.mapbase import GenericMap, SpatialPair
-
-from emission_models import uv, xrt
+from emission_models import uv, xrt, xray_bremsstrahlung
 from visualization.colormaps import color_tables
 
 # Importing sunpy dependencies for a synthetic map
 # See creating custom maps: https://docs.sunpy.org/en/stable/how_to/create_custom_map.html
 import sunpy.map
+from sunpy.map.mapbase import GenericMap, SpatialPair
+import textwrap
 from astropy.coordinates import SkyCoord
 from sunpy.coordinates import frames
 from sunpy.map.header_helper import make_fitswcs_header
 from sunpy.coordinates.sun import _radius_from_angular_radius
+
+class SyntheticImage():
+
+    """
+    Template for a parent class for the Synthetic Images
+    """
+    # TODO: Should this be an abstract class? So that abstract methods can be explicitly defined in each of the
+    #  inheriting classes
+
+    def __init__(self):
+        pass
+
 
 class SyntheticFilterImage():
 
@@ -35,7 +45,7 @@ class SyntheticFilterImage():
         :param dataset: Path of the downsampled dataset or a dataset itself
         """
 
-        self.box = None
+        self.box = None  # Importing a region within an initial dataset
 
         if isinstance(dataset, str):
             self.data = yt.load(dataset, units_override=units_override, hint=hint)
@@ -95,6 +105,7 @@ class SyntheticFilterImage():
 
         if self.plot_settings:
             self.plot_settings['cmap'] = cmap[self.instr]
+
 
     def proj_and_imag(self, plot_settings=None, view_settings=None, **kwargs):
 
@@ -222,6 +233,70 @@ class SyntheticFilterImage():
         Wavelength:\t\t {wave}
         """).format(inst=self.instr,
                     wave=self.channel)
+
+#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
+# so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
+# Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
+# IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
+# Or just inherit from SyntheticFilterImage (?)
+
+class SyntheticBandImage():
+
+    """
+    Class to store synthetic X-ray images generated in a given *energy band*, such as ones from RHESSI.
+    """
+
+    def __init__(self, dataset, emin, emax, nbins, emission_model, hint=None, units_override=None,
+                 view_settings=None, plot_settings=None, **kwargs):
+
+        """
+        :param dataset: Path of the downsampled dataset or a dataset itself
+        :param emin: low energy limit in keV
+        :param emax: high energy limit in keV
+        :param nbins: number of energy bins to compute synthetic spectra and images
+        """
+
+        self.emin = emin
+        self.emax = emax
+        self.nbins = nbins
+        self.emission_model = emission_model  # Thermal / Non-thermal
+
+        self.box = None  # Importing a region within an initial dataset
+
+        if isinstance(dataset, str):
+            self.data = yt.load(dataset, units_override=units_override, hint=hint)
+        elif isinstance(dataset, yt.data_objects.static_output.Dataset):
+            self.data = dataset
+        elif isinstance(dataset, yt.data_objects.selection_objects.region.YTRegion):
+            self.data = dataset.ds
+            self.box = dataset
+
+        self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
+        self.instr = kwargs.get('instr', 'RHESSI')
+        self.binscale = kwargs.get('binscale', 'linear')
+        self.obstime = kwargs.get('obstime', '2017-09-10')  # Observation time
+
+        self.view_settings = {'normal_vector': (0.0, 0.0, 1.0),  # pass vectors as mutable arguments
+                              'north_vector': (-0.7, -0.3, 0.0)}
+        self.__imag_field = None
+        self.image = None
+
+        if self.box:
+            self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
+        else:
+            self.domain_width = self.data.domain_width.in_units("cm").to_astropy()  # convert unyt to astropy.units
+
+    def make_band_image_field(self, **kwargs):
+
+        cmap = {}
+        imaging_model = None
+
+        if self.emission_model == 'Thermal':
+            imaging_model = xray_bremsstrahlung.ThermalBremsstrahlungModel
+
+        imaging_model.make_intensity_fields(self.data)
+        field = 'xray_' + str(emin) + '_' + str(emax) + '_keV_band'
+        self.__imag_field = field
 
 
 
