@@ -46,6 +46,10 @@ class ThermalBremsstrahlungModel:
 
     def process_data(self, chunk, spec_param):
 
+        # TODO: Implement iteration over the initial dataset in a way it's done in Pyxsim thermal_sources.py use
+        #  np.ravel and chunked from more_itertools.chunked to break down the full dataset.
+
+
         kboltz = 1.3807e-16  # Boltzmann's constant
         hplanck = 6.6261e-27  # Planck's constant cgs
 
