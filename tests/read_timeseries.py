@@ -160,7 +160,7 @@ def process_aia_maps(obs_data_path, start_time):
 
     plt.savefig('aia_obs_time_distance_diff.eps')
     plt.close()
-    return line_coords_
+    return [line_coords_, mapsequence]
 
 #%%
 def process_synth_maps(ds_dir, start_time, line_coords):
@@ -200,7 +200,22 @@ if __name__ == '__main__':
     ts = read_dataset(ds_dir)
     start_time = Time('2011-03-07T13:45:26', scale='utc', format='isot')
 
-    line_coords = process_aia_maps(obs_data_path, start_time)
+    line_coords = process_aia_maps(obs_data_path, start_time)[0]
+
+    # Attempt to call stackplotX to plot time-distance plots
+    import stackplotX as stp
+    #%%
+    sequence = process_aia_maps(obs_data_path, start_time)[1]
+    st = stp.Stackplot(sequence)
+    # #%%
+    import matplotlib.colors as colors
+    st.mapseq_mkdiff(mode='rratio', dt=0.1)
+    #
+    #%%
+    st.plot_mapseq(diff=True, norm=colors.LogNorm(vmin=1e1, vmax=8e2))
+    # st.plot_stackplot(norm=colors.LogNorm(vmin=1e1, vmax=8e2), cmap=cmap, uni_cm=True)
+    # st.stackplt_tofile('stack_plot_output.p')
+
     #%%
     #TODO: FIX upper boundary limit for intensity array (242 max)
     #process_synth_maps(ds_dir, start_time, line_coords)
