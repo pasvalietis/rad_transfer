@@ -1,4 +1,7 @@
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib
+
 import yt
 import os, sys, re
 import glob  # to load specific timeframes
@@ -20,6 +23,7 @@ sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from visualization.colormaps import color_tables
 
+# matplotlib.use('Qt5Agg')
 yt.enable_parallelism()
 
 
@@ -94,12 +98,15 @@ def download_maps():
     files.sort()
 
 
-def write_slit_profile(Map, line_coords, intensities, timesteps, start_time, timescale=None):
+def write_slit_profile(Map, line_coords, intensities, timesteps, start_time, timescale=None, synth=False):
 
     intensity_coords_ = sunpy.map.pixelate_coord_path(Map, line_coords)
     intensity_ = sunpy.map.sample_at_coords(Map, intensity_coords_)
     angular_separation_ = intensity_coords_.separation(intensity_coords_[0]).to(u.arcsec)
-    intensities.append(intensity_[:242])
+    if synth:
+        intensities.append(intensity_)
+    else:
+        intensities.append(intensity_[:242])
     timesteps.append((Map.date - start_time).to_value('s'))
 
     return angular_separation_
@@ -115,12 +122,28 @@ def process_aia_maps(obs_data_path, start_time):
         download_maps()
 
     mapsequence = sunpy.map.Map(obs_data_path + '/aia.lev1_euv_12s.2011-03-07T*.fits', sequence=True)
+
+    #m_seq_base = sunpy.map.Map([m - m_seq[0].quantity for m in m_seq[1:]], sequence=True)
+    m_seq_running = sunpy.map.Map(
+        [m - prev_m.quantity for m, prev_m in zip(mapsequence[2:], mapsequence[:-2])],
+        sequence=True
+    )
+
     line_coords_ = SkyCoord([-335, -380], [380, 480], unit=(u.arcsec, u.arcsec), frame=mapsequence[0].coordinate_frame)
 
     # RETURN AIA MAP SLIT PROFILES
-    for map in mapsequence:
+    idx = 0
+    plt.ioff()
+    for map in m_seq_running:
+        #fig = plt.figure()
+        #ax = fig.add_subplot(projection=map)
+        #ax.imshow(map.data,
+        #          origin="lower", norm=colors.Normalize(vmin=-200, vmax=200), cmap='Greys_r')
+        #plt.savefig('aiamaps/map_'+str(idx)+'.png')
+        #idx += 1
         angular_separation_ = write_slit_profile(map, line_coords_, intensities_AIA, timesteps_AIA, start_time)
 
+    #plt.close()
     timesteps = np.transpose(np.array(timesteps_AIA))
 
     xs = np.append(timesteps - np.diff(timesteps)[0] / 2., timesteps[-1] + np.diff(timesteps)[0] / 2.)[:]
@@ -130,13 +153,13 @@ def process_aia_maps(obs_data_path, start_time):
     Z = np.vstack(intensities_AIA).transpose()
 
     cmap = color_tables.aia_color_table(int(131) * u.angstrom)
-    plt.pcolormesh(X, Y, Z, shading='flat', cmap=cmap)
+    plt.pcolormesh(X, Y, Z, shading='flat', norm=colors.Normalize(vmin=-50, vmax=50), cmap='Greys_r') #cmap=cmap)
     plt.xlabel('timestep, s')
     plt.ylabel('Angular distance, arcsec')
     plt.title('start_time: ' + start_time.value)
 
-    plt.savefig('aia_obs_time_distance.eps')
-
+    plt.savefig('aia_obs_time_distance_diff.eps')
+    plt.close()
     return line_coords_
 
 #%%
@@ -149,7 +172,8 @@ def process_synth_maps(ds_dir, start_time, line_coords):
 
     for sto, ds in ts.piter(storage=storage):
         synth_map = gen_map_from_timeseries(ds, start_time, timescale=109.8)
-        angular_separation_ = write_slit_profile(synth_map, line_coords, intensities_SYNTH, timesteps_SYNTH, start_time)
+        angular_separation_ = write_slit_profile(synth_map, line_coords, intensities_SYNTH, timesteps_SYNTH,
+                                                 start_time, synth=True)
 
     xs = np.append(timesteps_SYNTH - np.diff(timesteps_SYNTH)[0] / 2.,
                    timesteps_SYNTH[-1] + np.diff(timesteps_SYNTH)[0] / 2.)
@@ -162,9 +186,9 @@ def process_synth_maps(ds_dir, start_time, line_coords):
     plt.pcolormesh(X, Y, Z.transpose(), shading='flat', cmap=cmap)
     plt.xlabel('timestep, s')
     plt.ylabel('Angular distance, arcsec')
-    plt.legend()
+    #plt.legend()
     plt.savefig('time_distance.eps')
-
+    plt.close()
     return
 
 #%%
@@ -179,4 +203,4 @@ if __name__ == '__main__':
     line_coords = process_aia_maps(obs_data_path, start_time)
     #%%
     #TODO: FIX upper boundary limit for intensity array (242 max)
-    process_synth_maps(ds_dir, start_time, line_coords)
+    #process_synth_maps(ds_dir, start_time, line_coords)
