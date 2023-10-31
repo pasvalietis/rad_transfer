@@ -12,11 +12,11 @@ from astropy.coordinates import SkyCoord
 import sunpy.map
 
 #PREP LEVEL 1.5 IMAGES
-from aiapy.calibrate import normalize_exposure, register, update_pointing
+# from aiapy.calibrate import normalize_exposure, register, update_pointing
 
 # Import synthetic image manipulation tools
 import yt
-sys.path.insert(0, '/home/ivan/Study/Astro/solar')
+sys.path.insert(0, '/home')
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.emission_models import uv, xrt
 
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     #     "temperature_unit": (1.13e8, "K"),
     # }
 
-    downs_file_path = '/home/ivan/Study/Astro/solar/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
+    downs_file_path = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
     subs_ds = yt.load(downs_file_path)  # , hint='AthenaDataset', units_override=units_override)
     cut_box = subs_ds.region(center=[0.0, 0.5, 0.0], left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 
