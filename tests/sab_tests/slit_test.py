@@ -17,7 +17,7 @@ from emission_models import uv, xrt
 
 aia_imag_lvl1 = sunpy.map.Map('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/aia_lev1_193a_2012_07_19t06_40_08_90z_image_lev1.fits')
 
-downs_file_path = '/datacubes/subs_3_flarecs-id_0012.h5'
+downs_file_path = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
 subs_ds = yt.load(downs_file_path)  # , hint='AthenaDataset', units_override=units_override)
 cut_box = subs_ds.region(center=[0.0, 0.5, 0.0], left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 
@@ -39,16 +39,21 @@ reference_pixel = u.Quantity([cusp_submap.reference_pixel[0].value,
                               cusp_submap.reference_pixel[1].value], u.pixel)
 reference_coord = cusp_submap.reference_coordinate
 
-img_tilt = -23*u.deg
+img_tilt = 0*u.deg
+# img_tilt = -23*u.deg
 
 synth_plot_settings = {'resolution': samp_resolution}
-synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],    # Line of sight
+synth_view_settings = {'normal_vector': [0, 0, 0.1],    # Line of sight
                        'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
+# synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],    # Line of sight
+#                        'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
 
 aia_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
                             view_settings=synth_view_settings,
-                            image_shift=[-52, 105],
+                            # image_shift=[-52, 105],               # move the bottom center of the flare in [x,y]
+                            image_shift=[0, 0],
                             bkg_fill=10)
+                            # bkg_fill=50)
 
 #Import scale from an AIA image:
 synth_map = aia_synthetic.make_synthetic_map(obstime='2013-10-28',
@@ -59,7 +64,7 @@ synth_map = aia_synthetic.make_synthetic_map(obstime='2013-10-28',
                                              reference_pixel=reference_pixel)  # .rotate(angle=0.0 * u.deg)
 
 synth_map.plot()
-plt.savefig('figures/default.jpg', dpi=250, orientation='landscape')
+plt.savefig('figures/t0_n0.1z_s0_b0.jpg', dpi=250, orientation='landscape')
 plt.show()
 plt.close()
 
