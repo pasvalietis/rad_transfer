@@ -41,7 +41,7 @@ def _current_density(field, data):
     j_x = data["gas", "magnetic_field_z_gradient_y"] - data["gas", "magnetic_field_y_gradient_z"]
     j_y = data["gas", "magnetic_field_x_gradient_z"] - data["gas", "magnetic_field_z_gradient_x"]
     j_z = data["gas", "magnetic_field_y_gradient_x"] - data["gas", "magnetic_field_x_gradient_y"]
-    return 4 * np.pi * np.sqrt(j_x**2 + j_y**2 + j_z**2) / (yt.physical_constants.c * norm)
+    return 4 * np.pi * np.abs(j_z) / (yt.physical_constants.c * norm)  # np.sqrt(j_x**2 + j_y**2 + j_z**2)
 #%%
 rad_buffer_obj.add_field(
     ("gas", "current_density"),
@@ -100,6 +100,15 @@ norm_vec = synth_view_settings['normal_vector']  # [0.12, 0.1, 1.0]
 north_vector = synth_view_settings['north_vector']  # [0.3, 0.7, 0.0]
 center_pos = [0.0, 0.5, 0.0]
 
+# Plot the projection of the velocity divergence
+# add transparent colormap to further overlay it over the 93 A image
+
+ncolors = 256
+color_array = plt.get_cmap('RdPu_r')(range(ncolors))
+color_array[:, -1] = np.linspace(0.0, 1.0, ncolors)
+map_object = LinearSegmentedColormap.from_list(name='inferno_alpha', colors=color_array)
+plt.register_cmap(cmap=map_object)
+
 prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
                         cut_box,
                         center_pos,  # center position in code units
@@ -141,11 +150,13 @@ pcm = ax.pcolor(X, Y, imag,
                         #vmax=1.5e4,
                         cmap=imgcmap, shading='auto', rasterized=True)
 
+jvmin = 1e4
+jvmax = 8e4
 ax.pcolor(X, Y, j_map,
-          #norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
-          #vmin=5e7,
-          #vmax=2e8,
-          cmap='inferno', shading='auto', rasterized=True)
+          #norm=colors.LogNorm(vmin=jvmin, vmax=jvmax),
+          vmin=jvmin,
+          vmax=jvmax,
+          cmap='inferno_alpha', shading='auto', rasterized=True)
 
 cbar = fig.colorbar(pcm, ax=ax, extend='max')
 cbar.set_label(label='DN cm$^5$ pix$^{-1}$ s$^{-1}$', rotation=270, labelpad=13)
@@ -154,5 +165,6 @@ ax.set_ylabel('$y$, Mm')
 ax.set_aspect('equal')
 
 ax.set_title('Current density j')
-figpath = '/home/ivan/Study/Astro/solar/rad_transfer/img/current_density/'
-plt.savefig(figpath + 'sdo_aia_'+str(channel)+'.png', dpi=140)
+figpath = '/home/ivan/Study/Astro/solar/rad_transfer/tests/imag/current_density/'
+plt.savefig(figpath + 'current_dens'+'.png', dpi=140)
+# np.median(rad_buffer_obj.all_data()['gas', 'current_density'])
