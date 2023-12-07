@@ -1,29 +1,24 @@
 import sys
 
-sys.path.insert(1, '/home/saber/rad_transfer')
+sys.path.insert(1, '/home/saber/CoronalLoopBuilder')
+clb_path = '/home/saber/CoronalLoopBuilder/examples/testing/'
 
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 import astropy.units as u
 from astropy.coordinates import SkyCoord, spherical_to_cartesian as stc
 import sunpy.map
 import astropy.constants as const
-from sunpy.coordinates import frames
 
 # Import synthetic image manipulation tools
 import yt
-# noinspection PyUnresolvedReferences
 from utils.proj_imag import SyntheticFilterImage as synt_img
-# noinspection PyUnresolvedReferences
-from emission_models import uv, xrt
 import pickle
 
+# noinspection PyUnresolvedReferences
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d
 
 # Method to create synthetic map of MHD data from rad_transfer
-
-
 def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_coord=None,
                   **kwargs):
 
@@ -33,17 +28,9 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
     if northvector is None:
         northvector = [0, 0, 1]
 
-    # # Load aia image map
-    # img = sunpy.map.Map(img_path)
-    #
-    # # Crop image map
-    # bl = SkyCoord(850 * u.arcsec, -330 * u.arcsec, frame=img.coordinate_frame)
-    # res = 250 * u.arcsec
-    # img = img.submap(bottom_left=bl, width=res, height=res)
-
     # Load and crop subsampled 3D MHD file
     downs_file_path = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
-    subs_ds = yt.load(downs_file_path)  # , hint='AthenaDataset', units_override=units_override)
+    subs_ds = yt.load(downs_file_path)
     cut_box = subs_ds.region(center=[0.0, 0.5, 0.0], left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 
     # Instrument settings for synthetic image
@@ -59,13 +46,10 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
 
     reference_coord = img.reference_coordinate
 
+    # Calculate reference pixel for synth img using loop midpoint
     if fm_coord is None:
         reference_pixel = u.Quantity([img.reference_pixel[0].value,
                                       img.reference_pixel[1].value], u.pixel)
-
-        # x, y of pixel. x - to + from right to left; y - to + from top to bottom
-        # reference_pixel = u.Quantity([img.reference_pixel[0].value - 50,
-        #                               img.reference_pixel[1].value + 60], u.pixel)
     else:
         fm_coord = fm_coord.transform_to(img.coordinate_frame)
         fm_pix = fm_coord.to_pixel(img.wcs)
@@ -77,8 +61,7 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
                            'vmin': 1e-15,
                            'vmax': 1e6,
                            'cmap': 'inferno',
-                           'logscale': True,
-                           }
+                           'logscale': True}
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
@@ -89,8 +72,8 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
 
     # Import scale from an AIA image:
     synth_map = aia_synthetic.make_synthetic_map(
-                                                 # obstime='2013-10-28',
-                                                 obstime=reference_coord.obstime,
+                                                 obstime='2013-10-28',
+                                                 # obstime=reference_coord.obstime,
                                                  observer='earth',
                                                  detector='Synthetic AIA',
                                                  scale=obs_scale,
@@ -100,17 +83,14 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
 
     if comp:
         synth_map = sunpy.map.Map(synth_map, vmin=1e-5, vmax=8e1, cmap='inferno')
-        comp = sunpy.map.Map(synth_map, img, composite=True)
-        comp.set_alpha(1, 0.4)
+        # comp = sunpy.map.Map(synth_map, img, composite=True)
+        comp = sunpy.map.Map(img, synth_map, composite=True)
+        comp.set_alpha(1, 0.55)
         ax = fig.add_subplot(projection=comp.get_map(0))
         comp.plot(axes=ax)
     else:
-        # bigmap = sunpy.map.Map(kwargs.get('path'))
-        # ax1 = fig.add_subplot(projection=bigmap)
-        # bigmap.plot(axes=ax1)
-
         ax = fig.add_subplot(projection=synth_map)
-        synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno', alpha=0.5)
+        synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
 
     return ax
 
@@ -210,11 +190,16 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 
 # Method to load maps from pickle file
 def load_maps(**kwargs):
+    """
+    Shortcut function to load pre-rendered (and cropped) maps from AIA and Stereo
+
+    :return: Paired list of aia, stereo A maps
+    """
     maps = []
 
-    mapdirs171 = ['maps/0_AIA-STEREOA_171_2012.pkl', 'maps/1_AIA-STEREOA_171_2012.pkl']
-    mapdirs195 = ['maps/0_AIA-STEREOA_195_2012.pkl', 'maps/1_AIA-STEREOA_195_2012.pkl']
-    mapdirs304 = ['maps/0_AIA-STEREOA_304_2012.pkl', 'maps/1_AIA-STEREOA_304_2012.pkl']
+    mapdirs171 = [clb_path + 'maps/0_AIA-STEREOA_171_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_171_2012.pkl']
+    mapdirs195 = [clb_path + 'maps/0_AIA-STEREOA_195_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_195_2012.pkl']
+    mapdirs304 = [clb_path + 'maps/0_AIA-STEREOA_304_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_304_2012.pkl']
 
     channel = kwargs.get('channel', 195)
 
@@ -238,26 +223,29 @@ def load_maps(**kwargs):
     return maps
 
 
+# Path to fits image of event
 img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/'
             'aia_lev1_193a_2012_07_19t06_40_08_90z_image_lev1.fits')
 
-# Load aia image map
+# Load aia image map from fits image
 img = sunpy.map.Map(img_path)
-
 # Crop image map
 bl = SkyCoord(850 * u.arcsec, -330 * u.arcsec, frame=img.coordinate_frame)
 res = 250 * u.arcsec
 img = img.submap(bottom_left=bl, width=res, height=res)
 
-params_path = 'loop_params/synth_test2_AIA2012.pkl'
+# Path to clb loop parameters
+params_path = clb_path + 'loop_params/synth_test2_AIA2012.pkl'
 # params_path = 'loop_params/synth_test_AIA2012.pkl'
 # params_path = 'loop_params/AIA_2012.pkl'
 
+# Load pre-rendered maps for selected channel
 maps = load_maps(channel=195)
 
+# Calculate normal and north vectors for synthetic image alignment
 norm, north = calc_vect(pkl=params_path)
 
-# coordinate of center of the line connecting both loop footpoints (foot midpoint)
+# Retreive the heliographic sky coordinate of the midpoint of the loop
 fm = SkyCoord(lon=93.5 * u.deg, lat=-15.0 * u.deg, radius=const.R_sun, frame='heliographic_stonyhurst',
               obstime=img.reference_coordinate.obstime)
 
@@ -273,5 +261,5 @@ coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, maps, pkl=params_path)
 plt.show()
 plt.close()
 
-# coronal_loop1.save_params_to_pickle("synth_test2_AIA2012.pkl")
+coronal_loop1.save_params_to_pickle("synth_test2_AIA2012.pkl")
 # coronal_loop1.save_to_fig("figs/az0ele67.5.jpg", dpi=300, bbox_inches='tight')
