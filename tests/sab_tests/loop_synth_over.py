@@ -83,10 +83,11 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
 
     if comp:
         synth_map = sunpy.map.Map(synth_map, vmin=1e-5, vmax=8e1, cmap='inferno')
-        # comp = sunpy.map.Map(synth_map, img, composite=True)
-        comp = sunpy.map.Map(img, synth_map, composite=True)
-        comp.set_alpha(1, 0.55)
+        # comp = sunpy.map.Map(img, synth_map, composite=True)
+        comp = sunpy.map.Map(synth_map, img, composite=True)
+        comp.set_alpha(1, 0.50)
         ax = fig.add_subplot(projection=comp.get_map(0))
+        # ax = fig.add_subplot(projection=img)
         comp.plot(axes=ax)
     else:
         ax = fig.add_subplot(projection=synth_map)
@@ -224,8 +225,11 @@ def load_maps(**kwargs):
 
 
 # Path to fits image of event
+# img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/'
+#             'aia_lev1_193a_2012_07_19t06_40_08_90z_image_lev1.fits')
+
 img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/'
-            'aia_lev1_193a_2012_07_19t06_40_08_90z_image_lev1.fits')
+            'aia_lev1_131a_2012_07_19t06_40_11_97z_image_lev1.fits')
 
 # Load aia image map from fits image
 img = sunpy.map.Map(img_path)
@@ -235,12 +239,11 @@ res = 250 * u.arcsec
 img = img.submap(bottom_left=bl, width=res, height=res)
 
 # Path to clb loop parameters
-params_path = clb_path + 'loop_params/synth_test2_AIA2012.pkl'
-# params_path = 'loop_params/synth_test_AIA2012.pkl'
-# params_path = 'loop_params/AIA_2012.pkl'
+params_path = 'loop_params/front_loop_131.pkl'
+# params_path = clb_path + 'loop_params/STEREOA_2012.pkl'
 
 # Load pre-rendered maps for selected channel
-maps = load_maps(channel=195)
+# maps = load_maps(channel=131)
 
 # Calculate normal and north vectors for synthetic image alignment
 norm, north = calc_vect(pkl=params_path)
@@ -256,10 +259,10 @@ synth_axs = [synthmap_plot(img, fig, normvector=norm, northvector=north,
 
 # sunpy.map.Map(img_path).plot(axes=synth_axs[0], autoalign=True)
 
-coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, maps, pkl=params_path)
+coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, [img], pkl=params_path)
 
 plt.show()
 plt.close()
 
-coronal_loop1.save_params_to_pickle("synth_test2_AIA2012.pkl")
-# coronal_loop1.save_to_fig("figs/az0ele67.5.jpg", dpi=300, bbox_inches='tight')
+# coronal_loop1.save_params_to_pickle("front_loop_131.pkl")
+coronal_loop1.save_to_fig("figs/composite_bw.jpg", dpi=300, bbox_inches='tight')
