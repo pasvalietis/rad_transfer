@@ -84,7 +84,7 @@ def ellipse_3d(x0, y0, z0, a, b, theta, phi, t):
     return x, y, z
 
 
-def semi_circle_loop(radius, majax, minax, height, theta0=0 * u.deg, phi0=0 * u.deg, el=90 * u.deg, az=0 * u.deg, samples_num=100):
+def semi_circle_loop(radius, majax, minax, ellipse, height, theta0=0 * u.deg, phi0=0 * u.deg, el=90 * u.deg, az=0 * u.deg, samples_num=100):
     '''
     Compute a semicircular loop with both footpoints rooted on the surface of the Sun.
 
@@ -115,8 +115,10 @@ def semi_circle_loop(radius, majax, minax, height, theta0=0 * u.deg, phi0=0 * u.
     t = np.linspace(0, 2 * np.pi, int(samples_num))  # Parameter t
 
     # Testing ellipse functionality
-    # dx, dy, dz = circle_3d(0, 0, 0, radius, theta, phi, t)
-    dx, dy, dz = ellipse_3d(0, 0, 0, majax, minax, theta, phi, t)
+    if ellipse:
+        dx, dy, dz = ellipse_3d(0, 0, 0, majax, minax, theta, phi, t)
+    else:
+        dx, dy, dz = circle_3d(0, 0, 0, radius, theta, phi, t)
 
     x = x0 + dx
     y = y0 + dy
@@ -176,7 +178,7 @@ class CoronalLoopBuilder:
     Class to build and visualize a coronal loop based on user-defined parameters using sliders.
     """
 
-    def __init__(self, fig, axs, dummy_maps, **kwargs):
+    def __init__(self, fig, axs, dummy_maps, ellipse=False, **kwargs):
         """
         Initialize the CoronalLoopBuilder with given parameters and create the initial visualization.
 
@@ -194,6 +196,7 @@ class CoronalLoopBuilder:
         """
         DEFAULT_MAJAX = 10.0 * u.Mm
         DEFAULT_MINAX = 10.0 * u.Mm
+        self.ellipse = ellipse
 
         DEFAULT_RADIUS = 10.0 * u.Mm
         DEFAULT_HEIGHT = 0.0 * u.Mm
@@ -212,21 +215,20 @@ class CoronalLoopBuilder:
                 dims = pickle.load(f)
                 print(f'Loop dimensions loaded:{dims}')
 
-                self.majax = dims['majax']
-                self.minax = dims['minax']
-                self.radius = dims['radius']
-                self._height = dims['height']
-                self.phi0 = dims['phi0']
-                self.theta0 = dims['theta0']
-                self.el = dims['el']
-                self.az = dims['az']
-                self.samples_num = dims['samples_num']
+                self.majax = dims['majax'] if 'majax' in dims else DEFAULT_MAJAX
+                self.minax = dims['minax'] if 'minax' in dims else DEFAULT_MINAX
+                self.radius = dims['radius'] if 'radius' in dims else DEFAULT_RADIUS
+                self._height = dims['height'] if 'height' in dims else DEFAULT_HEIGHT
+                self.phi0 = dims['phi0'] if 'phi0' in dims else DEFAULT_PHI0
+                self.theta0 = dims['theta0'] if 'theta0' in dims else DEFAULT_THETA0
+                self.el = dims['el'] if 'el' in dims else DEFAULT_EL
+                self.az = dims['az'] if 'az' in dims else DEFAULT_AZ
+                self.samples_num = dims['samples_num'] if 'samples_num' in dims else DEFAULT_SAMPLES_NUM
                 f.close()
         else:
             # Set the loop parameters using the provided values or default values
             self.majax = kwargs.get('majax', DEFAULT_MAJAX)
             self.minax = kwargs.get('minax', DEFAULT_MINAX)
-
             self.radius = kwargs.get('radius', DEFAULT_RADIUS)
             self._height = kwargs.get('height', DEFAULT_HEIGHT)
             self.phi0 = kwargs.get('phi0', DEFAULT_PHI0)
@@ -238,7 +240,6 @@ class CoronalLoopBuilder:
         # Store the initial values as class attributes
         self.initial_majax = self.majax
         self.initial_minax = self.minax
-
         self.initial_radius = self.radius
         self.initial_height = self.height
         self.initial_phi0 = self.phi0
@@ -312,21 +313,31 @@ class CoronalLoopBuilder:
         """
         self.updating_sliders = True
         # Create a separate figure for the sliders
-        # self.slider_fig, axs_sliders = plt.subplots(nrows=7, ncols=2, figsize=(6, 3), width_ratios=[5, 1])
-        self.slider_fig, axs_sliders = plt.subplots(nrows=9, ncols=2, figsize=(6, 3), width_ratios=[5, 1])
+        if self.ellipse:
+            self.slider_fig, axs_sliders = plt.subplots(nrows=8, ncols=2, figsize=(6, 3), width_ratios=[5, 1])
+        else:
+            self.slider_fig, axs_sliders = plt.subplots(nrows=7, ncols=2, figsize=(6, 3), width_ratios=[5, 1])
         self.slider_fig.subplots_adjust(left=0.3, wspace=0.1)
 
         plt.get_current_fig_manager().set_window_title(self.color + '-loop')
 
         # # Create sliders
-        ax_slider_radius, ax_slider_height, ax_slider_phi0, ax_slider_theta0, \
-            ax_slider_el, ax_slider_az, ax_slider_samples_num, \
-            ax_slider_majax, ax_slider_minax= axs_sliders[:, 0]
+        if self.ellipse:
+            (ax_slider_majax, ax_slider_minax,
+             ax_slider_height, ax_slider_phi0, ax_slider_theta0,
+             ax_slider_el, ax_slider_az, ax_slider_samples_num) = axs_sliders[:, 0]
 
-        self.slider_majax = Slider(ax_slider_majax, 'Major Axis [Mm]', 3, 500, valinit=self.majax.to(u.Mm).value)
-        self.slider_minax = Slider(ax_slider_minax, 'Minor Axis [Mm]', 3, 500, valinit=self.minax.to(u.Mm).value)
+            self.slider_majax = Slider(ax_slider_majax, 'Major Axis [Mm]', 3, 500, valinit=self.majax.to(u.Mm).value)
+            self.slider_minax = Slider(ax_slider_minax, 'Minor Axis [Mm]', 3, 500, valinit=self.minax.to(u.Mm).value)
+            self.slider_majax.valtext.set_visible(False)
+            self.slider_minax.valtext.set_visible(False)
+        else:
+            ax_slider_radius, ax_slider_height, ax_slider_phi0, ax_slider_theta0, \
+                ax_slider_el, ax_slider_az, ax_slider_samples_num = axs_sliders[:, 0]
 
-        self.slider_radius = Slider(ax_slider_radius, 'Radius [Mm]', 3, 500, valinit=self.radius.to(u.Mm).value)
+            self.slider_radius = Slider(ax_slider_radius, 'Radius [Mm]', 3, 500, valinit=self.radius.to(u.Mm).value)
+            self.slider_radius.valtext.set_visible(False)
+
         self.slider_height = Slider(ax_slider_height, 'Height [Mm]', -300, 300, valinit=self.height.to(u.Mm).value)
         self.slider_phi0 = Slider(ax_slider_phi0, r'HGLN $\Phi$ [deg]', 0, 360, valinit=self.phi0.to(u.deg).value)
         self.slider_theta0 = Slider(ax_slider_theta0, r'HGLT $\Theta$ [deg]', -90, 90,
@@ -337,10 +348,6 @@ class CoronalLoopBuilder:
                                          valstep=10)
         self.slider_samples_num.valtext.set_text('{:.0f}'.format(self.slider_samples_num.val))  # Display as integer
 
-        self.slider_majax.valtext.set_visible(False)
-        self.slider_minax.valtext.set_visible(False)
-
-        self.slider_radius.valtext.set_visible(False)
         self.slider_height.valtext.set_visible(False)
         self.slider_phi0.valtext.set_visible(False)
         self.slider_theta0.valtext.set_visible(False)
@@ -402,56 +409,62 @@ class CoronalLoopBuilder:
             self.from_textbox = False
             self._update(None)
 
-        axbox_radius = axs_sliders[0, 1]
-        self.text_box_radius = TextBox(axbox_radius, '')
-        self.text_box_radius.on_submit(submit_radius)
-        self.text_box_radius.set_val(f"{self.radius.to(u.Mm).value:.1f}")
+        if self.ellipse:
+            eind = 1
 
-        axbox_height = axs_sliders[1, 1]
+            axbox_majax = axs_sliders[0, 1]
+            self.text_box_majax = TextBox(axbox_majax, '')
+            self.text_box_majax.on_submit(submit_majax)
+            self.text_box_majax.set_val(f"{self.majax.to(u.Mm).value:.1f}")
+
+            axbox_minax = axs_sliders[1, 1]
+            self.text_box_minax = TextBox(axbox_minax, '')
+            self.text_box_minax.on_submit(submit_minax)
+            self.text_box_minax.set_val(f"{self.minax.to(u.Mm).value:.1f}")
+
+            self.slider_majax.on_changed(self._update)
+            self.slider_minax.on_changed(self._update)
+        else:
+            eind = 0
+
+            axbox_radius = axs_sliders[0, 1]
+            self.text_box_radius = TextBox(axbox_radius, '')
+            self.text_box_radius.on_submit(submit_radius)
+            self.text_box_radius.set_val(f"{self.radius.to(u.Mm).value:.1f}")
+
+            self.slider_radius.on_changed(self._update)
+
+        axbox_height = axs_sliders[1 + eind, 1]
         self.text_box_height = TextBox(axbox_height, '')
         self.text_box_height.on_submit(submit_height)
         self.text_box_height.set_val(f"{self.height.to(u.Mm).value:.1f}")
 
-        axbox_phi0 = axs_sliders[2, 1]
+        axbox_phi0 = axs_sliders[2 + eind, 1]
         self.text_box_phi0 = TextBox(axbox_phi0, '')
         self.text_box_phi0.on_submit(submit_phi0)
         self.text_box_phi0.set_val(f"{self.phi0.to(u.deg).value:.2f}")
 
-        axbox_theta0 = axs_sliders[3, 1]
+        axbox_theta0 = axs_sliders[3 + eind, 1]
         self.text_box_theta0 = TextBox(axbox_theta0, '')
         self.text_box_theta0.on_submit(submit_theta0)
         self.text_box_theta0.set_val(f"{self.theta0.to(u.deg).value:.2f}")
 
-        axbox_el = axs_sliders[4, 1]
+        axbox_el = axs_sliders[4 + eind, 1]
         self.text_box_el = TextBox(axbox_el, '')
         self.text_box_el.on_submit(submit_el)
         self.text_box_el.set_val(f"{self.el.to(u.deg).value:.2f}")
 
-        axbox_az = axs_sliders[5, 1]
+        axbox_az = axs_sliders[5 + eind, 1]
         self.text_box_az = TextBox(axbox_az, '')
         self.text_box_az.on_submit(submit_az)
         self.text_box_az.set_val(f"{self.az.to(u.deg).value:.2f}")
 
-        axbox_samples_num = axs_sliders[6, 1]
+        axbox_samples_num = axs_sliders[6 + eind, 1]
         self.text_box_samples_num = TextBox(axbox_samples_num, '')
         self.text_box_samples_num.on_submit(submit_samples_num)
         self.text_box_samples_num.set_val(f"{int(self.samples_num):.0f}")
 
-        axbox_majax = axs_sliders[7, 1]
-        self.text_box_majax = TextBox(axbox_majax, '')
-        self.text_box_majax.on_submit(submit_majax)
-        self.text_box_majax.set_val(f"{self.majax.to(u.Mm).value:.1f}")
-
-        axbox_minax = axs_sliders[8, 1]
-        self.text_box_minax = TextBox(axbox_minax, '')
-        self.text_box_minax.on_submit(submit_minax)
-        self.text_box_minax.set_val(f"{self.minax.to(u.Mm).value:.1f}")
-
         # Attach update function to sliders
-        self.slider_majax.on_changed(self._update)
-        self.slider_minax.on_changed(self._update)
-
-        self.slider_radius.on_changed(self._update)
         self.slider_height.on_changed(self._update)
         self.slider_theta0.on_changed(self._update)
         self.slider_phi0.on_changed(self._update)
@@ -502,10 +515,12 @@ class CoronalLoopBuilder:
     def _init_sliders_value(self, event):
         self.initializing = True
         # Set the sliders to the current values
-        self.slider_majax.set_val(self.majax.to(u.Mm).value)
-        self.slider_minax.set_val(self.minax.to(u.Mm).value)
+        if self.ellipse:
+            self.slider_majax.set_val(self.majax.to(u.Mm).value)
+            self.slider_minax.set_val(self.minax.to(u.Mm).value)
+        else:
+            self.slider_radius.set_val(self.radius.to(u.Mm).value)
 
-        self.slider_radius.set_val(self.radius.to(u.Mm).value)
         self.slider_height.set_val(self.height.to(u.Mm).value)
         self.slider_phi0.set_val(self.phi0.to(u.deg).value)
         self.slider_theta0.set_val(self.theta0.to(u.deg).value)
@@ -528,28 +543,39 @@ class CoronalLoopBuilder:
         """
         Compute the coordinates of the coronal loop based on the current slider values.
         """
-        loop, self.loop_length = semi_circle_loop(self.radius, self.majax, self.minax, self.height, self.theta0, self.phi0, self.el, self.az,
+        loop, self.loop_length = semi_circle_loop(self.radius, self.majax, self.minax, self.ellipse, self.height, self.theta0, self.phi0, self.el, self.az,
                                                   int(self.samples_num))
         return loop
 
     def _print_values(self, event):
-        print(f"radius = {self.radius.value:.1f} * u.{self.radius.unit}, "
-              f"majax = {self.majax.value:.1f} * u.{self.majax.unit}, "
-              f"minax = {self.minax.value:.1f} * u.{self.minax.unit}, "
-              f"height = {self.height.value:.1f} * u.{self.height.unit}, "
-              f"phi0 = {self.phi0.value:.2f} * u.{self.phi0.unit}, "
-              f"theta0 = {self.theta0.value:.2f} * u.{self.theta0.unit}, "
-              f"el = {self.el.value:.2f} * u.{self.el.unit}, "
-              f"az = {self.az.value:.2f} * u.{self.az.unit}, "
-              f"samples_num = {int(self.samples_num)}")
+
+        if self.ellipse:
+            print(f"majax = {self.majax.value:.1f} * u.{self.majax.unit}, "
+                  f"minax = {self.minax.value:.1f} * u.{self.minax.unit}, "
+                  f"height = {self.height.value:.1f} * u.{self.height.unit}, "
+                  f"phi0 = {self.phi0.value:.2f} * u.{self.phi0.unit}, "
+                  f"theta0 = {self.theta0.value:.2f} * u.{self.theta0.unit}, "
+                  f"el = {self.el.value:.2f} * u.{self.el.unit}, "
+                  f"az = {self.az.value:.2f} * u.{self.az.unit}, "
+                  f"samples_num = {int(self.samples_num)}")
+        else:
+            print(f"radius = {self.radius.value:.1f} * u.{self.radius.unit}, "
+                  f"height = {self.height.value:.1f} * u.{self.height.unit}, "
+                  f"phi0 = {self.phi0.value:.2f} * u.{self.phi0.unit}, "
+                  f"theta0 = {self.theta0.value:.2f} * u.{self.theta0.unit}, "
+                  f"el = {self.el.value:.2f} * u.{self.el.unit}, "
+                  f"az = {self.az.value:.2f} * u.{self.az.unit}, "
+                  f"samples_num = {int(self.samples_num)}")
 
     def _reset_sliders(self, event):
         # Reset the sliders to their initial values
         self.initializing = True
-        self.slider_radius.set_val(self.initial_radius.to(u.Mm).value)
 
-        self.slider_majax.set_val(self.initial_majax.to(u.Mm).value)
-        self.slider_minax.set_val(self.initial_minax.to(u.Mm).value)
+        if self.ellipse:
+            self.slider_majax.set_val(self.initial_majax.to(u.Mm).value)
+            self.slider_minax.set_val(self.initial_minax.to(u.Mm).value)
+        else:
+            self.slider_radius.set_val(self.initial_radius.to(u.Mm).value)
 
         self.slider_height.set_val(self.initial_height.to(u.Mm).value)
         self.slider_phi0.set_val(self.initial_phi0.to(u.deg).value)
@@ -575,10 +601,12 @@ class CoronalLoopBuilder:
 
         self.programmatic_update = True
 
-        self.majax = u.Quantity(self.slider_majax.val, u.Mm)
-        self.minax = u.Quantity(self.slider_minax.val, u.Mm)
+        if self.ellipse:
+            self.majax = u.Quantity(self.slider_majax.val, u.Mm)
+            self.minax = u.Quantity(self.slider_minax.val, u.Mm)
+        else:
+            self.radius = u.Quantity(self.slider_radius.val, u.Mm)
 
-        self.radius = u.Quantity(self.slider_radius.val, u.Mm)
         self.height = u.Quantity(self.slider_height.val, u.Mm)
         self.phi0 = u.Quantity(self.slider_phi0.val, u.deg)
         self.theta0 = u.Quantity(self.slider_theta0.val, u.deg)
@@ -592,14 +620,6 @@ class CoronalLoopBuilder:
         if self.height < -self.radius:
             self.height = -self.radius * 0.9
             self.slider_height.set_val(self.height.to(u.Mm).value)  # Update the slider value to reflect the change
-
-        # newheight = u.Quantity(self.slider_height.val, u.Mm)
-        # if newheight > self.radius:
-        #     self.slider_height.set_val(self.height.to(u.Mm).value)
-        # elif newheight < -self.radius:
-        #     self.slider_height.set_val(self.height.to(u.Mm).value)
-        # else:
-        #     self.height = newheight
 
         self.loop_coords = self._compute_loop()
         self.midptn_coords = (
@@ -617,28 +637,16 @@ class CoronalLoopBuilder:
         for ax in self.axs:
             ax.figure.canvas.draw_idle()
 
-        # for line, ptn in zip(self.lines, self.ptns):
-        #     line.remove()
-        #     ptn.remove()
-        #
-        # self.lines = []
-        # self.ptns = []
-        # for ax, dummy_map in zip(self.axs, self.dummy_maps):
-        #     line, = ax.plot_coord(self.loop_coords.transform_to(dummy_map.coordinate_frame), color='C0', lw=2)
-        #     ptn, = ax.plot_coord(self.midptn_coords.transform_to(dummy_map.coordinate_frame), color='C3', marker='o',
-        #                          ms=3)
-        #     self.lines.append(line)
-        #     self.ptns.append(ptn)
-        #     ax.figure.canvas.draw_idle()
-
         # Update text box values
-        if hasattr(self, 'text_box_radius'):
-            self.text_box_radius.set_val(f"{self.radius.to(u.Mm).value:.1f}")
 
-        if hasattr(self, 'text_box_majax'):
-            self.text_box_majax.set_val(f"{self.majax.to(u.Mm).value:.1f}")
-        if hasattr(self, 'text_box_minax'):
-            self.text_box_minax.set_val(f"{self.minax.to(u.Mm).value:.1f}")
+        if self.ellipse:
+            if hasattr(self, 'text_box_majax'):
+                self.text_box_majax.set_val(f"{self.majax.to(u.Mm).value:.1f}")
+            if hasattr(self, 'text_box_minax'):
+                self.text_box_minax.set_val(f"{self.minax.to(u.Mm).value:.1f}")
+        else:
+            if hasattr(self, 'text_box_radius'):
+                self.text_box_radius.set_val(f"{self.radius.to(u.Mm).value:.1f}")
 
         if hasattr(self, 'text_box_height'):
             self.text_box_height.set_val(f"{self.height.to(u.Mm).value:.1f}")
@@ -679,13 +687,20 @@ class CoronalLoopBuilder:
                 Parameters:
                 - filename (str): The name of the pickle file to save to. Defaults to "dims.pkl".
                 """
-        data_to_save = {
-            'radius': self.radius, 'height': self._height,
-            'phi0': self.phi0, 'theta0': self.theta0,
-            'el': self.el, 'az': self.az,
-            'samples_num': self.samples_num,
-            'majax': self.majax, 'minax': self.minax
-        }
+        if self.ellipse:
+            data_to_save = {
+                'majax': self.majax, 'minax': self.minax, 'height': self._height,
+                'phi0': self.phi0, 'theta0': self.theta0,
+                'el': self.el, 'az': self.az,
+                'samples_num': self.samples_num
+            }
+        else:
+            data_to_save = {
+                'radius': self.radius, 'height': self._height,
+                'phi0': self.phi0, 'theta0': self.theta0,
+                'el': self.el, 'az': self.az,
+                'samples_num': self.samples_num
+            }
 
         dirname = 'loop_params'
         os.makedirs(f'./{dirname}', exist_ok=True)
@@ -743,13 +758,15 @@ class CoronalLoopBuilder:
         - samples_num: Number of samples for the parameter t. Default is 1000.
         """
         # Update the loop parameters with the provided values
-        if 'radius' in kwargs:
-            self.radius = kwargs['radius']
 
-        if 'majax' in kwargs:
-            self.majax = kwargs['majax']
-        if 'minax' in kwargs:
-            self.minax = kwargs['minax']
+        if self.ellipse:
+            if 'majax' in kwargs:
+                self.majax = kwargs['majax']
+            if 'minax' in kwargs:
+                self.minax = kwargs['minax']
+        else:
+            if 'radius' in kwargs:
+                self.radius = kwargs['radius']
 
         if 'height' in kwargs:
             self.height = kwargs['height']
