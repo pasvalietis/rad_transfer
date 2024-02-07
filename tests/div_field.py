@@ -123,9 +123,12 @@ reference_coord = cusp_submap.reference_coordinate
 
 img_tilt = 23*u.deg
 
+normal_vector = [1., 1., 1.] #[-0.12, 0.05, 0.916]
+north_vector = [0., 1., 0.] #[np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]
+
 synth_plot_settings = {'resolution': samp_resolution}
-synth_view_settings = {'normal_vector': [-0.12, 0.05, 0.916],
-                       'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
+synth_view_settings = {'normal_vector': normal_vector,
+                       'north_vector': north_vector}
 
 '''
 img_tilt = -23*u.deg
@@ -199,6 +202,7 @@ rad_buffer_obj.add_field(
 N = 512
 nframes = 1
 imgcmap = color_tables.aia_color_table(131*u.angstrom)
+imgcmap_reversed = imgcmap.reversed()
 plt.ioff()
 #for i in range(nframes):
 #norm_vec = [1.0 - i*(1./nframes), 0.0+i*(1./(nframes*3.)), i*(1./nframes)]
@@ -247,15 +251,15 @@ imag = data_img #+ 1e-17*np.ones((N, N))  # Eliminate zeros in logscale
 divvmap = np.array(divvprj)
 antidivvmap = np.array(antidivprj)
 
-vmin=10
-vmax=914.910
+vmin= 3
+vmax= 500 #914.910
 imag[imag == 0] = vmin
 
 pcm = ax.pcolor(X, Y, imag,
                         norm=colors.LogNorm(vmin=vmin, vmax=vmax),
                         #vmin=1e-5,
                         #vmax=1.5e4,
-                        cmap=imgcmap, shading='auto', rasterized=True)
+                        cmap=imgcmap_reversed, shading='auto', rasterized=True)
 
 ax.pcolor(X, Y, divvmap,
           #norm=colors.LogNorm(vmin=1e6, vmax=2.5e8),
@@ -269,17 +273,17 @@ ax.pcolor(X, Y, antidivvmap,
           vmax=7e7,
           cmap='inferno_beta', shading='auto', rasterized=True)
 
-ax.annotate("Y Point, div v > 0",
+ax.annotate(r"Y Point, $\nabla\cdot\mathbf{v} > 0$",
             xy=(0, 70), xycoords='data', color='magenta',
             xytext=(20, 90), textcoords='data',
             arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color='magenta'))
 
-ax.annotate("X Point, div v > 0",
+ax.annotate(r"X Point, $\nabla\cdot\mathbf{v} > 0$",
             xy=(-21, 145), xycoords='data', color='magenta',
             xytext=(20, 130), textcoords='data',
             arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color='magenta'))
 
-ax.annotate("TS, div v < 0",
+ax.annotate(r"TS, $\nabla\cdot\mathbf{v} < 0$",
             xy=(0, 85), xycoords='data', color='red',
             xytext=(20, 110), textcoords='data',
             arrowprops=dict(arrowstyle="->", connectionstyle="arc3", color='red'))
@@ -298,4 +302,4 @@ ax.set_aspect('equal')
 ax.set_title('$div(v)$') #'Synthetic AIA '+str(channel)+' Å')
 #plt.show()
 figpath = '/home/ivan/Study/Astro/solar/rad_transfer/tests/imag/velocity_field/'
-plt.savefig(figpath + 'sdo_aia_'+str(channel)+'_mov_'+'.pgf', dpi=140)  # +str(i).zfill(3)
+plt.savefig(figpath + 'sdo_aia_'+str(channel)+'_mov_'+'.png', dpi=340)  # +str(i).zfill(3)
