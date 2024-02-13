@@ -1,21 +1,18 @@
 import sunpy.map
 import matplotlib.pyplot as plt
-import astropy.units as u
-from astropy.coordinates import SkyCoord
+import os
 
-img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/'
-            'aia_lev1_131a_2012_07_19t06_40_11_97z_image_lev1.fits')
+events_path = '/home/saber/Downloads/2013_lvl1/'
 
-img = sunpy.map.Map(img_path)
-# Crop image map
-bl = SkyCoord(850 * u.arcsec, -330 * u.arcsec, frame=img.coordinate_frame)
-res = 250 * u.arcsec
-img = img.submap(bottom_left=bl, width=res, height=res)
+def draw_all():
+    for filename in os.listdir(events_path)[0:5]:
+        img = sunpy.map.Map(str(os.path.join(events_path, filename)))
 
-plt.figure()
-img.plot()
+        plt.figure()
+        img.plot()
 
-plt.savefig('figs/nosynth.jpg', dpi=250, bbox_inches='tight')
+    plt.show()
+    plt.close()
 
-plt.show()
-plt.close()
+
+draw_all()

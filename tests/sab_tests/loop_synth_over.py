@@ -98,6 +98,14 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
 
 def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u.deg, el=90 * u.deg, az=0 * u.deg,
               samples_num=100, **kwargs):
+
+    DEFAULT_RADIUS = 10.0 * u.Mm
+    DEFAULT_HEIGHT = 0.0 * u.Mm
+    DEFAULT_PHI0 = 0.0 * u.deg
+    DEFAULT_THETA0 = 0.0 * u.deg
+    DEFAULT_EL = 90.0 * u.deg
+    DEFAULT_AZ = 0.0 * u.deg
+
     if 'pkl' in kwargs:
         with open(kwargs.get('pkl'), 'rb') as f:
             dims = pickle.load(f)
