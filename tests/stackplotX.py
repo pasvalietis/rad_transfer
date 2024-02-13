@@ -38,13 +38,18 @@ else:
     pass
 
 import sunpy.map
-# from sunpy.physics.solar_rotation import mapsequence_solar_derotate ## deprecated in sunpy 4
-from sunkit_image.coalignment import mapsequence_coalign_by_rotation
+
 from sunpy.map.mapsequence import MapSequence
+
+if pversion.parse(sunpy.version.version) >= pversion.parse('4.0'):
+    from sunkit_image.coalignment import mapsequence_coalign_by_rotation
+else:
+    # deprecated in sunpy 4
+    from sunpy.physics.solar_rotation import mapsequence_solar_derotate
+
 
 if pversion.parse(sunpy.version.version) >= pversion.parse('2.1'):
     from aiapy.calibrate import register, update_pointing
-
 
     def aiaprep(sunpymap):
         m_updated_pointing = update_pointing(sunpymap)
@@ -1856,7 +1861,6 @@ class Stackplot:
                                               get_peak=get_peak, trackslit_diffrot=trackslit_diffrot, negval=negval,
                                               movingcut=movingcut)
 
-
         if layout_vert:
             fig_mapseq = plt.figure(figsize=(7, 7))
         else:
@@ -2019,9 +2023,9 @@ class Stackplot:
             axcolor = 'lightgoldenrodyellow'
             ax2.set_xlim(dspec['x'][frm_range[0]], dspec['x'][frm_range[-1]])
             ax2_pos = ax2.get_position().extents
-            # axframe2 = plt.axes([ax2_pos[0], 0.03, ax2_pos[2]-ax2_pos[0], 0.02], facecolor=axcolor)
-            axframe2 = plt.axes([ax2_pos[0], ax2_pos[1], ax2_pos[2] - ax2_pos[0], ax2_pos[3] - ax2_pos[1]],
-                                facecolor=axcolor, frame_on=False)
+            axframe2 = plt.axes([ax2_pos[0], 0.03, ax2_pos[2]-ax2_pos[0], 0.02], facecolor=axcolor)
+            # axframe2 = plt.axes([ax2_pos[0], ax2_pos[1], ax2_pos[2] - ax2_pos[0], ax2_pos[3] - ax2_pos[1]],
+            #                    facecolor=axcolor, frame_on=False)
             self.sframe2 = Slider(axframe2, '', frm_range[0], frm_range[-1] - 1, valinit=frm_range[0],
                                   valfmt='frm %0.0f',
                                   alpha=0.0)
