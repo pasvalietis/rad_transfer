@@ -86,19 +86,22 @@ pos[:, 0] = c[0] + np.ravel(pos_dx)
 pos[:, 1] = c[1] + np.ravel(pos_dy)
 pos[:, 2] = c[2] + np.ravel(pos_dz)
 pos=pos.to('Mm')
+
 '''
 Create streamlines of the 3D magnetic field and integrate them through the box volume
 '''
+
 streamlines = Streamlines(
     rad_buffer_obj,
     pos,
     ('gas', 'magnetic_field_x'),
     ('gas', 'magnetic_field_y'),
     ('gas', 'magnetic_field_z'),
-    length=150. * Mm,
+    length=410. * Mm,
     get_magnitude=True,
 )
 streamlines.integrate_through_volume()
+
 #%%
 '''
 Creating a matplotlib 3D plot to trace the streamlines through the 3D volume of the plot
@@ -112,11 +115,11 @@ fig.add_axes(ax)
 for stream in streamlines.streamlines.to('Mm'):
     stream = stream[np.all(stream != 0.0, axis=1)]
     ax.plot3D(stream[:, 0], stream[:, 1], stream[:, 2], alpha=0.25, linewidth=0.6, color='indigo')
-    ax.view_init(100, -20, 90)
+    #ax.view_init(100, -20, 90)
+    ax.view_init(-145, -45, 120)
     plt.grid(visible=None)
 
 # ax.text2D(0.75, 0.05, "Newly reconnected \n highly bent field lines", transform=ax.transAxes)
-
 # ax.annotate3D('Newly reconnected \n highly bent field lines', (0, 100, 0),
 #               xytext=(0.75, 0.05),
 #               textcoords='offset points',
@@ -128,10 +131,13 @@ ax.set_ylabel('$y$, Mm')
 ax.set_zticks([-30, 30])
 ax.set_zlabel('$z$, Mm')
 ax.set_aspect('equal')
+ax.grid(False)
 # Axes3D.text(x, y, z, s, zdir=None, **kwargs)
 
+#%%
 # Save the plot to disk.
-plt.savefig("mag_field_lines.pgf")
+plt.ioff()
+plt.savefig("mag_field_lines.eps") #pgf")
 
 
 
