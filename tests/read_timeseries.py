@@ -238,21 +238,46 @@ if __name__ == '__main__':
     #object_file = pickle.load(file)
     #file.close()
     #%%
-    mapsequence = sunpy.map.Map(obs_data_path + '/aia.lev1_euv_12s.2011-03-07T*.fits', sequence=True)
+    # Testing newly calibrated flare-domain ROI from full-disk maps
+    obs_lvl15_flare_data = '/media/ivan/TOSHIBA EXT/aia_img/2011_event/flare_roi/calibrated/middle_interval/'#time_interval/'
+    mapsequence = sunpy.map.Map(obs_lvl15_flare_data + 'aia.lev1.5_euv_12s_roi.2011-03-07T*.fits', sequence=True)
+
+    # mapsequence = sunpy.map.Map(obs_data_path + '/aia.lev1_euv_12s.2011-03-07T*.fits', sequence=True)
     # #%%
-    sequence = mapsequence # process_aia_maps(obs_data_path, start_time)[1]
+
+    binpix = 2
+
+    res_maps = []
+
+    # for map in mapsequence.maps:
+    #     submaptmp = map.superpixel(u.Quantity((binpix * u.pix, binpix * u.pix)))
+    #     data = map.data / float(binpix ** 2)
+    #     submaptmp = sunpy.map.Map(data, submaptmp.meta)
+    #     res_maps.append(submaptmp)
+    # mapsequence  # process_aia_maps(obs_data_path, start_time)[1]
+
+    sequence = mapsequence # sunpy.map.Map(res_maps, sequence=True)
     st = stp.Stackplot(sequence)
+
+    st.mapseq_resample(binpix=2)
+
+    # Alternatively create a mapsequence using file list
     #%%
-    st.mapseq_mkdiff(mode='rratio', dt=12.)
-    st.plot_mapseq(diff=True, norm=colors.Normalize(vmin=0.1, vmax=2.4)) #norm=colors.LogNorm(vmin=1e1, vmax=8e2))
+    st.mapseq_mkdiff(mode='rdiff', dt=12.)
+    st.plot_mapseq(diff=True, norm=colors.LogNorm(vmin=1e1, vmax=8e2))
     #%%
+    slit_file = './td_slit_data_v1.pickle'
+    if os.path.isfile(slit_file):
+        st.cutslit_fromfile(infile=slit_file)
+    else:
+        st.cutslit_tofile(outfile='td_slit_data_v1.pickle')
+
     #st.cutslitbd.update()
     #%%
-    #st.plot_stackplot(norm=colors.Normalize(vmin=0.8, vmax=1.4), cmap='Greys', uni_cm=True)
+    st.plot_stackplot(norm=colors.Normalize(vmin=-74, vmax=74), cmap='Greys', uni_cm=False)
+
     #%%
     #st.stackplt_tofile('stack_plot_output.p')
-
     # #%%
     # #TODO: FIX upper boundary limit for intensity array (242 max)
     # #process_synth_maps(ds_dir, start_time, line_coords)
-
