@@ -236,7 +236,7 @@ def load_maps(**kwargs):
 # img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/'
 #             'aia_lev1_193a_2012_07_19t06_40_08_90z_image_lev1.fits')
 
-img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/'
+img_path = ('/home/saber/CoronalLoopBuilder/examples/testing/downloaded_events/2012-07-19/'
             'aia_lev1_131a_2012_07_19t06_40_11_97z_image_lev1.fits')
 
 # Load aia image map from fits image
@@ -273,4 +273,4 @@ plt.show()
 plt.close()
 
 # coronal_loop1.save_params_to_pickle("front_loop_131.pkl")
-coronal_loop1.save_to_fig("figs/composite_bw.jpg", dpi=300, bbox_inches='tight')
+# coronal_loop1.save_to_fig("figs/composite_bw.jpg", dpi=300, bbox_inches='tight')

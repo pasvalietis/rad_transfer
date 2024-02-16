@@ -1,5 +1,5 @@
 import sunpy.map
-from xrtpy.response.xrt_teem import xrt_teem
+from xrtpy.response.temperature_from_filter_ratio import temperature_from_filter_ratio as tffr
 import matplotlib.pyplot as plt
 
 def plt_trans():
@@ -35,8 +35,8 @@ ev2 = 'L1_XRT20130515_045708.6.fits'
 map1 = sunpy.map.Map(events_path + ev1)
 map2 = sunpy.map.Map(events_path + ev2)
 
-T_EM = xrt_teem(map1, map2)
-T_e = T_EM[0]
+T_EM = tffr(map1, map2)
+T_e = T_EM.Tmap
 
 def plot_temp():
     import matplotlib.pyplot as plt
