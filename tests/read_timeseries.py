@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import pickle
 
-# import yt
+import yt
 import os, sys, re
 import glob  # to load specific timeframes
 
@@ -22,8 +22,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
-# from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
-# from rad_transfer.visualization.colormaps import color_tables
+from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
+from rad_transfer.visualization.colormaps import color_tables
 
 # matplotlib.use('Qt5Agg')
 
@@ -220,7 +220,7 @@ if __name__ == '__main__':
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
     obs_data_path = '/media/ivan/TOSHIBA EXT/aia_img/maps_part/'
     #'/home/ivan/sunpy/data'  # '/media/ivan/TOSHIBA EXT/aia_img' # '/media/ivan/TOSHIBA EXT/aia_img/low_res'#
-    # ts = read_dataset(ds_dir)
+    tsamples = read_dataset(ds_dir)
     start_time = Time('2011-03-07T13:45:26', scale='utc', format='isot')
 
     #line_coords = process_aia_maps(obs_data_path, start_time, running_diff=False)[0]
@@ -239,7 +239,7 @@ if __name__ == '__main__':
     #file.close()
     #%%
     # Testing newly calibrated flare-domain ROI from full-disk maps
-    obs_lvl15_flare_data = '/media/ivan/TOSHIBA EXT/aia_img/2011_event/flare_roi/calibrated/middle_interval/'#time_interval/'
+    obs_lvl15_flare_data = '/media/ivan/TOSHIBA EXT/aia_img/2011_event/flare_roi/calibrated/time_interval/' #middle_interval/'#
     mapsequence = sunpy.map.Map(obs_lvl15_flare_data + 'aia.lev1.5_euv_12s_roi.2011-03-07T*.fits', sequence=True)
 
     # mapsequence = sunpy.map.Map(obs_data_path + '/aia.lev1_euv_12s.2011-03-07T*.fits', sequence=True)
@@ -255,26 +255,36 @@ if __name__ == '__main__':
     #     submaptmp = sunpy.map.Map(data, submaptmp.meta)
     #     res_maps.append(submaptmp)
     # mapsequence  # process_aia_maps(obs_data_path, start_time)[1]
+    #%%
+    ts = read_dataset(ds_dir)
+    synth_map_list = []
+    for dataset in ts:
+        syn_map = gen_map_from_timeseries(dataset, start_time, timescale=109.8)
+        synth_map_list.append(syn_map)
+    synthmaps = sunpy.map.Map(synth_map_list, sequence=True)
+    #%%
 
-    sequence = mapsequence # sunpy.map.Map(res_maps, sequence=True)
-    st = stp.Stackplot(sequence)
+    mapsequence = synthmaps
+
+    st = stp.Stackplot(mapsequence)
 
     st.mapseq_resample(binpix=2)
 
     # Alternatively create a mapsequence using file list
     #%%
-    st.mapseq_mkdiff(mode='rdiff', dt=12.)
-    st.plot_mapseq(diff=True, norm=colors.LogNorm(vmin=1e1, vmax=8e2))
+    st.mapseq_mkdiff(mode='dtrend', dt=12.)
+    #st.mapseq_mkdiff(mode='rdiff', dt=12.)
+    st.plot_mapseq(diff=True, norm=colors.LogNorm(vmin=1e0, vmax=8e1)) #norm=colors.LogNorm(vmin=1e1, vmax=8e2))
     #%%
-    slit_file = './td_slit_data_v1.pickle'
+    slit_file = './td_slit_synth_horizontal.pickle'
     if os.path.isfile(slit_file):
         st.cutslit_fromfile(infile=slit_file)
     else:
-        st.cutslit_tofile(outfile='td_slit_data_v1.pickle')
+        st.cutslit_tofile(outfile='td_slit_synth_horizontal.pickle')
 
     #st.cutslitbd.update()
     #%%
-    st.plot_stackplot(norm=colors.Normalize(vmin=-74, vmax=74), cmap='Greys', uni_cm=False)
+    st.plot_stackplot(norm=colors.Normalize(vmin=-74, vmax=74), cmap='Greys', uni_cm=False) #
 
     #%%
     #st.stackplt_tofile('stack_plot_output.p')
