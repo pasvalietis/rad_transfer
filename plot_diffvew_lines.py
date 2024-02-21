@@ -13,7 +13,8 @@
 #   2022-02-25
 #%%
 import os
-os.environ["XUVTOP"] = "/home/ivan/Study/Astro/solar/xuv/chianti"
+#os.environ["XUVTOP"] = "/home/ivan/Study/Astro/solar/xuv/chianti"
+os.environ["XUVTOP"] = "/home/ivan/Study/Astro/solar/xuv/CHIANTI_10.0.2_database"
 from cProfile import label
 from colorsys import yiq_to_rgb
 import math
@@ -232,12 +233,13 @@ pickle.dump([fe21, fe24], f) # dump data to f
 f.close()
 '''
 #%%
-[fe21n, fe24n] = pickle.load(open("./data_chianti_fe/fe21_24.p", "rb"))
+fe_pickle_path = '/home/ivan/Study/Astro/solar/rad_transfer/tests/data_chianti_fe/fe21_24.p'
+[fe21, fe24] = pickle.load(open(fe_pickle_path, "rb"))
 #%%
 # ------------------------------------------------------------------------------
 # 0.1 Initialize parameters
 # ------------------------------------------------------------------------------
-filename = 'flarecs-id.0035.vtk'
+filename = 'flarecs-id.0012.vtk' # timestep 35 before
 yc_chosen = 0.48
 
 # ------------------------------------------------------------------------------
