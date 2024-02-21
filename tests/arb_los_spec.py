@@ -1,5 +1,5 @@
 import os
-os.environ["XUVTOP"] = "/home/ivan/Study/Astro/solar/xuv/CHIANTI_10.1_database"
+os.environ["XUVTOP"] = "/home/ivan/Study/Astro/solar/xuv/CHIANTI_10.0.2_database"
 from cProfile import label
 from colorsys import yiq_to_rgb
 import math
@@ -98,10 +98,10 @@ def func_intensity_fe21(lines, v_sample, te_sample, rho_sample, rho_char_in, te_
 
         I_1d = np.zeros(nsample)
         for j in range(nsample):
-            n_e = rho_sample[j] * rho_char_in  # cm^-3
+            n_e = rho_sample[j] #* rho_char_in  # cm^-3
             n_H = n_e
-            t_c = te_sample[j] * te_char_in  # K
-            v_c = v_sample[j] * v_char_in  # cm/s
+            t_c = te_sample[j] #* te_char_in  # K
+            v_c = v_sample[j] #* v_char_in  # cm/s
             g_c1, g_c2 = func_g(t_c, fe21, fe24)
 
             phi_nu_c = func_phi_nu(nu_c, nu0_1354, t_c, v_c)
@@ -146,6 +146,10 @@ for i in range(nsample):
 
 # ray[('gas','velocity_x')].value, ray[('gas','velocity_y')].value, ray[('gas','velocity_z')].value
 
+'''
+Properly extract and rescale physical parameters from the model
+'''
+
 # Reproject velocity along the los vector:
 #for i in range(ray.shape):
 v_sample = ray[('gas', 'velocity_x')].value * los_vec[0] + ray[('gas', 'velocity_y')].value * los_vec[1] +\
@@ -162,6 +166,29 @@ rho_sample = ray[('gas', 'density')].value
 
 #%%
 plt.ioff()
-plt.plot(wv_arr, I_nu, c='red')
-plt.savefig('./fe_xxi.png')
-plt.close()
+plt.rcParams.update({'font.size': 8})
+
+fig, axs = plt.subplots(2, 2)
+
+axs[0, 0].plot(lines_cm, v_sample, c='red')
+axs[0, 0].set_title('LOS velocity profile')
+axs[0, 1].plot(lines_cm, te_sample, c='tab:orange') #plot(x, y, 'tab:orange')
+axs[0, 1].set_title('LOS Temperature profile')
+axs[1, 0].plot(lines_cm, rho_sample, c='tab:green') #plot(x, -y, 'tab:green')
+axs[1, 0].set_title('LOS density profile')
+axs[1, 1].plot(wv_arr, I_nu, c='tab:blue') #plot(x, -y, 'tab:red')
+axs[1, 1].set_title('Synthetic Fe XXI intensity')
+
+plt.subplots_adjust(top=0.92,
+                    bottom=0.085,
+                    left=0.08,
+                    right=0.975,
+                    hspace=0.315,
+                    wspace=0.145)
+
+
+#plt.subplot_tool()
+#plt.show()
+# plt.plot(wv_arr, I_nu, c='red')
+plt.savefig('./fe_xxi.png', dpi=250)
+#plt.close()
