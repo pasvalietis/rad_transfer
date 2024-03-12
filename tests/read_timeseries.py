@@ -1,5 +1,6 @@
 import matplotlib
-matplotlib.use('TkAgg')
+# matplotlib.use('TkAgg')
+matplotlib.use("qt5agg")
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import pickle
@@ -26,13 +27,12 @@ from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.visualization.colormaps import color_tables
 
 # matplotlib.use('Qt5Agg')
-
 # yt.enable_parallelism()
 
 def read_dataset(ds_dir):
     ds_lst = glob.glob(ds_dir+"/*.h5") #[1][0-9].h5")
     ds_lst.sort(key=lambda f: int(re.sub('\D', '', f)))  # Sort filenames in dataset list in ascending order
-    ts = yt.DatasetSeries(ds_lst)
+    ts = yt.DatasetSeries(ds_lst, hint="YTGridDataset")
     return ts
 
 #%%
