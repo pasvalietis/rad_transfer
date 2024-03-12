@@ -8,8 +8,10 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-from emission_models import uv, xrt, xray_bremsstrahlung
-from visualization.colormaps import color_tables
+sys.path.insert(0, '/home/ivan/Study/Astro/solar')
+
+from rad_transfer.emission_models import uv, xrt, xray_bremsstrahlung
+from rad_transfer.visualization.colormaps import color_tables
 
 # Importing sunpy dependencies for a synthetic map
 # See creating custom maps: https://docs.sunpy.org/en/stable/how_to/create_custom_map.html
@@ -63,6 +65,7 @@ class SyntheticFilterImage():
                               'north_vector': (-0.7, -0.3, 0.0)}
         self.__imag_field = None
         self.image = None
+        self.generic_data = kwargs.get('generic', None)
 
         if self.box:
             self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
@@ -171,7 +174,11 @@ class SyntheticFilterImage():
         Creates a synthetic map object that can be loaded/edited with sunpy
         :return:
         """
+
         data = self.image
+        if self.generic_data:
+            data = self.generic_data
+
         self.obstime = kwargs.get('obstime')
 
         # Define header parameters for the synthetic image
