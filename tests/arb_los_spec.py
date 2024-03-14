@@ -24,6 +24,28 @@ from astropy import units as u
 from astropy import constants as const
 from astropy.modeling import models, fitting
 
+export_pm = 'tex'
+if export_pm == 'tex':
+    import matplotlib
+    params = {
+        'text.latex.preamble': ['\\usepackage{gensymb}'],
+        'image.origin': 'lower',
+        'image.interpolation': 'nearest',
+        'image.cmap': 'gray',
+        'axes.grid': False,
+        #'savefig.dpi': 150,  # to adjust notebook inline plot size
+        'axes.labelsize': 8, # fontsize for x and y labels (was 10)
+        'axes.titlesize': 8,
+        'font.size': 8, # was 10
+        #'legend.fontsize': 6, # was 10
+        'xtick.labelsize': 6,
+        'ytick.labelsize': 6,
+        'text.usetex': True,
+        'figure.figsize': [6.39, 4.10],
+        'font.family': 'sans',
+    }
+    matplotlib.rcParams.update(params)
+
 #%%
 (1300.08 * u.AA).to(u.Hz, equivalencies=u.spectral())
 Kb = 1.38e-16 # (erg deg^-1)
@@ -173,6 +195,7 @@ def plot_params(phi, lines, wv_arr, v_sample, te_sample, rho_sample, I_nu):
     plt.rcParams.update({'font.size': 6})
 
     fig, axs = plt.subplots(2, 2)
+    fig.suptitle('Viewing angle:  '+"{:.3f}%".format(phi))
 
     v_sample.convert_to_units('km/s')
     axs[0, 0].plot(lines.to('Mm'), v_sample, c='red', linewidth=0.65)
@@ -222,11 +245,11 @@ def plot_params(phi, lines, wv_arr, v_sample, te_sample, rho_sample, I_nu):
     # plt.close()
 
 # ray[('gas','velocity_x')].value, ray[('gas','velocity_y')].value, ray[('gas','velocity_z')].value
-
+#%%
 '''
 Properly extract and rescale physical parameters from the model
 '''
-ang_res = 15
+ang_res = 54
 for i in range(ang_res):
     # Define new ray geometries
     phi = i * 90. / ang_res * u.deg  # Ray rotation angle
