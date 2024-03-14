@@ -168,7 +168,7 @@ class SyntheticFilterImage():
         new_arr[starty:starty + cropy, startx:startx + cropx] = zoomed_img
         return new_arr
 
-    def make_synthetic_map(self, **kwargs):
+    def make_synthetic_map(self, generic_data=None, **kwargs):
 
         """
         Creates a synthetic map object that can be loaded/edited with sunpy
@@ -176,8 +176,9 @@ class SyntheticFilterImage():
         """
 
         data = self.image
-        if self.generic_data:
-            data = self.generic_data
+        if generic_data is not None:
+            print('proj_imag_: loading generic data container')
+            data = generic_data
 
         self.obstime = kwargs.get('obstime')
 
