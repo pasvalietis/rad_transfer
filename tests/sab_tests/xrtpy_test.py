@@ -2,11 +2,10 @@ import sunpy.map
 from xrtpy.response.temperature_from_filter_ratio import temperature_from_filter_ratio as tffr
 import matplotlib.pyplot as plt
 
-def plt_trans():
+def plt_trans(filt='Ti-poly'):
     import xrtpy
     import matplotlib.pyplot as plt
 
-    filt = 'Ti-poly'
     channel = xrtpy.response.Channel(filt)
 
     plt.figure(figsize=(10,6))

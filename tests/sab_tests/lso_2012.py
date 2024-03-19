@@ -206,19 +206,22 @@ def load_maps(**kwargs):
     """
     maps = []
 
-    mapdirs171 = [clb_path + 'maps/0_AIA-STEREOA_171_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_171_2012.pkl']
-    mapdirs195 = [clb_path + 'maps/0_AIA-STEREOA_195_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_195_2012.pkl']
-    mapdirs304 = [clb_path + 'maps/0_AIA-STEREOA_304_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_304_2012.pkl']
+    # mapdirs171 = [clb_path + 'maps/0_AIA-STEREOA_171_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_171_2012.pkl']
+    # mapdirs195 = [clb_path + 'maps/0_AIA-STEREOA_195_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_195_2012.pkl']
+    # mapdirs304 = [clb_path + 'maps/0_AIA-STEREOA_304_2012.pkl', clb_path + 'maps/1_AIA-STEREOA_304_2012.pkl']
+    #
+    # channel = kwargs.get('channel', 195)
+    #
+    # mapdirs = []
+    # if channel == 171:
+    #     mapdirs = mapdirs171
+    # if channel == 195:
+    #     mapdirs = mapdirs195
+    # if channel == 304:
+    #     mapdirs = mapdirs304
 
-    channel = kwargs.get('channel', 195)
-
-    mapdirs = []
-    if channel == 171:
-        mapdirs = mapdirs171
-    if channel == 195:
-        mapdirs = mapdirs195
-    if channel == 304:
-        mapdirs = mapdirs304
+    mapdirs = [clb_path + 'maps/2013/AIA_{}.pkl'.format(str(kwargs.get('channel', 195))),
+               clb_path + 'maps/2013/STEREOB_{}.pkl'.format(str(kwargs.get('channel', 195)))]
 
     for name in mapdirs:
         with open(name, 'rb') as f:
