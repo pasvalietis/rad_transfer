@@ -22,7 +22,7 @@ if __name__ == '__main__':
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
 
     # sample j_z dataset
-    downs_file_path = ds_dir + '/subs_3_flarecs-id_0060.h5'
+    downs_file_path = ds_dir + '/subs_3_flarecs-id_0048.h5'
     dataset = yt.load(downs_file_path, hint="YTGridDataset")
 
     rad_buffer_obj = dataset
@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
 #%%
 # make a cut along x = 0
-    nslices = 8
+    nslices = 20
     axes = 'xyz'
     nax = 2
     axis = axes[nax]
@@ -73,9 +73,30 @@ if __name__ == '__main__':
         cs_loc_profile = cs_loc[('gas', 'current_density')].value
         cs_max_x_coord = cs_loc.argmax(('gas', 'current_density'))[0].value
 
+        cs_width_pix = 3  # three pixels
         cs_ray = rad_buffer_obj.ray([cs_max_x_coord, 0.0, z_coord], [cs_max_x_coord, 1.0, z_coord])
-        cs_profile = cs_ray[('gas', 'current_density')].value
+
         cs_profile_coords = cs_ray.fcoords.value[:, 1]  # cs_profile ray coordinates along y
+
+        cs_slit = np.zeros((cs_ray.fcoords[:, 0].shape[0], cs_width_pix))
+#%%
+        for j in range(cs_width_pix):
+            dx = 0.0045
+            x_slit = cs_max_x_coord - (dx * (cs_width_pix // 2)) + j * dx
+            cs_ray = rad_buffer_obj.ray([x_slit, 0.0, z_coord], [x_slit, 1.0, z_coord])
+            # Normalize current density along the slit
+            idx_max = np.argmin(cs_profile_coords - 0.96)
+            max_val = cs_ray[('gas', 'current_density')].value[idx_max] #.max()
+            cs_slit[:, j] = cs_ray[('gas', 'current_density')].value
+#%%
+        # cs_profile = cs_ray[('gas', 'current_density')].value
+        # Find average value along the slit
+        #cs_profile = np.sqrt(np.mean(cs_slit, axis=1)/ max_val)
+        cs_profile = np.sqrt(np.mean(cs_slit, axis=1) / max_val) # np.mean(cs_slit, axis=1) # / max_val
+
+#%%
+
+
         # plt.plot(np.linspace(0, 1, cs_profile.shape[0]), cs_profile)
 
 #%%
@@ -104,7 +125,7 @@ if __name__ == '__main__':
         #ax11.plot(np.gradient(cs_profile, np.linspace(0, 1, cs_profile.shape[0])),
         #          np.linspace(0, 1, cs_profile.shape[0]))
         ax11.set_ylim(0, 1)
-        ax11.set_xlim(0, 2e-5)
+        ax11.set_xlim(0, 1.0)
         ax11.set_ylabel('y, code length')
         ax11.set_xlabel('$j_z$')
 
@@ -132,12 +153,11 @@ if __name__ == '__main__':
         Alternative method: find where j_z is about one half of initial value on top of the domain (y~0.95)
         '''
         init_idx = np.argmin(abs(cs_profile_coords - 0.96))
-        half_idx = np.argmin(abs(cs_profile - 0.5*cs_profile[init_idx]))
+        half_idx = np.argmin(abs(cs_profile - 0.60*cs_profile[init_idx]))
 
         yp_ycoord = cs_profile_coords[half_idx]
 
         ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='red')
-
 
         ax22 = divider.append_axes("bottom", size="25%", pad=0.5)
         ax22.plot(np.linspace(-0.05, 0.05, cs_loc_profile.shape[0]), cs_loc_profile, linewidth=0.65, color='magenta')
