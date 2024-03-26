@@ -150,9 +150,9 @@ if __name__ == '__main__':
         '''
         crd_idx = cs_der_y[np.where((cs_profile_coords > 0.75) & (cs_profile_coords < 0.95))].argmax()
         yp_ycoord = cs_profile_coords[np.where((cs_profile_coords > 0.75) & (cs_profile_coords < 0.95))][crd_idx]
-        ax.axhline(y=yp_ycoord, color='magenta', alpha=0.2)
+        # ax.axhline(y=yp_ycoord, color='magenta', alpha=0.2)
         # Plot the location of the y point
-        ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='magenta')
+        # ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='magenta')
         #ax12.set_yticks([])
         # plt.show()
 
@@ -160,11 +160,12 @@ if __name__ == '__main__':
         Alternative method: find where j_z is about one half of initial value on top of the domain (y~0.95)
         '''
         init_idx = np.argmin(abs(cs_profile_coords - 0.96))
-        half_idx = np.argmin(abs(cs_profile - 0.60*cs_profile[init_idx]))
+        half_idx = np.argmin(abs((cs_profile) - 0.30*cs_profile[init_idx]))
 
         yp_ycoord = cs_profile_coords[half_idx]
 
         ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='red')
+        ax.axhline(y=yp_ycoord, color='red', alpha=0.2)
 
         ax22 = divider.append_axes("bottom", size="25%", pad=0.5)
         ax22.plot(np.linspace(-0.05, 0.05, cs_loc_profile.shape[0]), cs_loc_profile, linewidth=0.65, color='magenta')
