@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
 #%%
 # make a cut along x = 0
-    nslices = 20
+    nslices = 1 #20
     axes = 'xyz'
     nax = 2
     axis = axes[nax]
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     for i in range(nslices):
 
         coord = coord_range[i]
-        #coord = -0.0833
+        coord = -0.1184
         if i == 0 or i == nslices - 1:
             coord = np.trunc(coord*1e3)/1e3
 
@@ -92,7 +92,9 @@ if __name__ == '__main__':
         # cs_profile = cs_ray[('gas', 'current_density')].value
         # Find average value along the slit
         #cs_profile = np.sqrt(np.mean(cs_slit, axis=1)/ max_val)
-        cs_profile = np.sqrt(np.mean(cs_slit, axis=1) / max_val) # np.mean(cs_slit, axis=1) # / max_val
+        init_profile = np.mean(cs_slit, axis=1) / np.mean(cs_slit, axis=1)[np.argmin(cs_profile_coords - 0.96)]
+        single_pix_profile = cs_slit[:, 1] / cs_slit[:, 1][np.argmin(cs_profile_coords - 0.96)]
+        cs_profile = (np.mean(cs_slit, axis=1) / max_val) ** 2. # np.mean(cs_slit, axis=1) # / max_val
 
 #%%
 
@@ -121,7 +123,7 @@ if __name__ == '__main__':
 
         # divider2 = make_axes_locatable(ax)
         ax11 = divider.append_axes("left", size="40%", pad=0.30)
-        ax11.plot(cs_profile, np.linspace(0, 1, cs_profile.shape[0]), linewidth=0.65, color='indigo')
+        ax11.plot(cs_profile, cs_profile_coords, linewidth=0.65, color='indigo')
         #ax11.plot(np.gradient(cs_profile, np.linspace(0, 1, cs_profile.shape[0])),
         #          np.linspace(0, 1, cs_profile.shape[0]))
         ax11.set_ylim(0, 1)
@@ -131,13 +133,18 @@ if __name__ == '__main__':
 
         ax12 = ax11.twiny()
         color = 'tab:blue'
-        ax12.set_xlabel('$dj_z/dy$', color=color)  # we already handled the x-label with ax1
+        #ax12.set_xlabel('$dj_z/dy$', color=color)  # we already handled the x-label with ax1
         y_cut = np.linspace(0, 1, cs_profile.shape[0])
         cs_der_y = np.gradient(cs_profile, y_cut)
-        ax12.plot(cs_der_y, y_cut, color=color, linewidth=0.65, alpha=0.75)
+        #ax12.plot(cs_der_y, y_cut, color=color, linewidth=0.65, alpha=0.75)
+        ax12.plot(init_profile, cs_profile_coords, label='init', linestyle='--')
+        ax12.plot(single_pix_profile, cs_profile_coords, label='1Pix', linestyle='--')
+        ax12.legend()
         ax12.tick_params(axis='y', labelcolor=color)
         ax12.set_ylim(0, 1)
-        ax12.set_xlim(0.25*cs_der_y.min(), 0.25*cs_der_y.max())
+        ax12.set_xlim(0., 1.0)
+        # ax12.set_xlim(0.25*cs_der_y.min(), 0.25*cs_der_y.max())
+
         '''
         Identifying location of y-point from the maximum of the first derivative
         '''
