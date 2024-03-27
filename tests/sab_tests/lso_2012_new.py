@@ -91,7 +91,7 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
 
     if comp:
         comp = sunpy.map.Map(synth_map, img, composite=True)
-        comp.set_alpha(1, 0.50)
+        comp.set_alpha(0, 0.50)
         ax = fig.add_subplot(projection=comp.get_map(0))
         comp.plot(axes=ax)
     else:
@@ -102,7 +102,7 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
         pixels = synth_map.wcs.world_to_pixel(coord)
         # coord_img=img.reference_coordinate
         # pixels_img=img.wcs.world_to_pixel(coord_img)
-        # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
+        center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
         ax.plot_coord(coord, 'o', color='r')
         ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
         # ax.plot_coord(coord_img, 'o', color='b')
@@ -155,13 +155,14 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 
     dx, dy, dz = circle_3d(0, 0, 0, radius, theta, phi, t)
 
+    # Arrays of parametric coordinates
     x = x0 + dx
     y = y0 + dy
     z = z0 + dz
 
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
-    rdiff = r - r_1
-    rsort = np.argmin(np.abs(rdiff))
+    rdiff = r - r_1     # Array of radii minus radius of sun
+    rsort = np.argmin(np.abs(rdiff))    # Minimum r of parametric point
     if rdiff[rsort] + rdiff[rsort + 1] < 0:
         rsort += 1
     r = np.roll(r, -rsort)
@@ -177,9 +178,6 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     x = x[i_r]
     y = y[i_r]
     z = z[i_r]
-    dx = dx[i_r]
-    dy = dy[i_r]
-    dz = dz[i_r]
 
     # Calculate the length of the loop based on the angle between the start and end points.
     # Define the vectors v1 and v2
@@ -197,6 +195,7 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     norm[1] = norm0[2]
     norm[2] = norm0[0]
 
+    # This should be correct - not affected by az, el
     # Derive the cartesian coordinates of a normalized vector pointing in the direction
     # of the coronal loop's spherical coordinates (midpoint of footpoints)
     midptn_cart = stc(1, theta0, phi0)
@@ -217,7 +216,7 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 clb_path = '/home/saber/CoronalLoopBuilder/examples/testing/'
 
 # Path to target sunpy map
-map_path = (clb_path + 'maps/2013/AIA-171.pkl')
+map_path = (clb_path + 'maps/2012/AIA-171.pkl')
 
 # Retrieve sunpy map object
 with open(map_path, 'rb') as f:
@@ -225,8 +224,9 @@ with open(map_path, 'rb') as f:
     f.close()
 
 # Path to clb loop parameters
-# params_path = clb_path + 'loop_params/2013/front_2013.pkl'
-params_path = './loop_params/2013/front_2013_testing.pkl'
+# params_path = clb_path + 'loop_params/2012/front_2012.pkl'
+params_path = './loop_params/2012/front_2012_testing.pkl'
+
 
 # Calculate normal and north vectors for synthetic image alignment
 norm, north = calc_vect(pkl=params_path)
@@ -237,13 +237,10 @@ with open(params_path, 'rb') as f:
     f.close()
 lat = params['theta0'].value
 lon = params['phi0'].value
+height = params['height']
 
 # define the heliographic sky coordinate of the midpoint of the loop
-# fm = SkyCoord(lon=lon * u.deg, lat=lat * u.deg, radius=const.R_sun, frame='heliographic_stonyhurst',
-#               obstime=img.reference_coordinate.obstime)
 hheight = 75*u.Mm
-# fm = SkyCoord(lon=lon * u.deg, lat=lat * u.deg, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
-#               observer='earth', obstime=img.reference_coordinate.obstime).transform_to(frame='helioprojective')
 fm = SkyCoord(lon=lon * u.deg, lat=lat * u.deg, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
               observer='earth', obstime=img.reference_coordinate.obstime).transform_to(frame='helioprojective')
 
@@ -256,4 +253,5 @@ coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, [img], pkl=params_path)
 plt.show()
 plt.close()
 
-coronal_loop1.save_params_to_pickle('2013/front_2013_testing.pkl')
+coronal_loop1.save_params_to_pickle('2012/front_2012_testing.pkl')
+
