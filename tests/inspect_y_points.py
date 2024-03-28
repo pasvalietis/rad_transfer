@@ -10,9 +10,13 @@ matplotlib.use("qt5agg")  # matplotlib.use('TkAgg')
 
 import os
 import sys
+from pathlib import Path
+import copy
 import numpy as np
+import pickle
 
 import yt
+import unyt
 from yt.visualization.image_writer import write_image
 
 import time  # To test runs in parallel
@@ -20,6 +24,7 @@ import time  # To test runs in parallel
 from current_density import _current_density
 # Identify features in the current density profile
 from scipy.signal import argrelmin, find_peaks_cwt
+from scipy.optimize import curve_fit
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 
 start_time = time.time()
@@ -27,6 +32,19 @@ yt.enable_parallelism()
 
 def detect_sharp_slope(arr):
     pass
+
+'''
+Gaussian fits, from 
+https://gist.github.com/cpascual/a03d0d49ddd2c87d7e84b9f4ad2df466
+'''
+def gauss(x, H, A, x0, sigma):
+    return H + A * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
+
+def gauss_fit(x, y):
+    mean = sum(x * y) / sum(y)
+    sigma = np.sqrt(sum(y * (x - mean) ** 2) / sum(y))
+    popt, pcov = curve_fit(gauss, x, y, p0=[min(y), max(y), mean, sigma])
+    return popt
 
 #%%
 def find_roots(x,y):
@@ -60,14 +78,17 @@ def has_a_peak_counterpart(profile, coords, threshold, peak_range=np.arange(0.1,
     # Determine the coordinates (float) of the intersection points between the profile and the threshold line
     root_point_coords = find_roots(coords, profile - threshold)
 
+    if len(root_point_coords) == 0:
+        raise ValueError('No intersections with a threshold')
+
     # Find coordinates of local minima and maxima
     minima = argrelmin(profile)
     maxima = find_peaks_cwt(profile, peak_range)
     # indices of coord array where extrema occur
     ind_extrema = np.concatenate((minima[0], maxima), axis=0)
-    flags = np.full(len(int_point_coords), True)
+    flags = np.full(len(root_point_coords), True)
 
-    for point_idx in range(len(int_point_coords)): # iterate over root points array
+    for point_idx in range(len(root_point_coords)): # iterate over root points array
         point_coord_idx = np.abs(coords - root_point_coords[point_idx]).argmin()
         point_coord = coords[point_coord_idx]
 
@@ -96,7 +117,7 @@ def has_a_peak_counterpart(profile, coords, threshold, peak_range=np.arange(0.1,
 
         # if there is a mirror root, set flag to False
 
-    y_point_coord = root_point_coords[np.where(flags == True)][0]
+    y_point_coord = root_point_coords[np.where(flags == True)][-1]
     print(' ---------- y-point filtering routine ----------')
     print('flags: ', flags)
     print('y-point coordinate', y_point_coord)
@@ -110,7 +131,7 @@ if __name__ == '__main__':
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
 
     # sample j_z dataset
-    downs_file_path = ds_dir + '/subs_3_flarecs-id_0048.h5'
+    downs_file_path = ds_dir + '/subs_3_flarecs-id_0050.h5'
     dataset = yt.load(downs_file_path, hint="YTGridDataset")
     cur_time = dataset.current_time.value.item()
 
@@ -131,7 +152,7 @@ if __name__ == '__main__':
 
     #%%
     # make a cut along x = 0
-    nslices = 1  # 20
+    nslices = 20  # 20
     axes = 'xyz'
     nax = 2
     axis = axes[nax]
@@ -140,11 +161,13 @@ if __name__ == '__main__':
                               rad_buffer_obj.domain_right_edge[nax].value,
                               nslices)
 
+    ypoint_coords = {'timestep': cur_time, 'coordinates': []}
+
     for i in range(nslices):
 
         coord = coord_range[i]
         if nslices == 1:
-            coord = -0.1389
+            coord = 0.2490
 
         if i == 0 or i == nslices - 1:
             coord = np.trunc(coord*1e3)/1e3  # floor the coordinate to avoid including the edges of the domain
@@ -163,14 +186,22 @@ if __name__ == '__main__':
             z_coord = None
 #%%
         print("Cast a yt ray: %s seconds" % (time.time() - start_time))
-        cs_loc = rad_buffer_obj.ray([-0.05, 0.98, z_coord],
-                                    [0.05, 0.98, z_coord])  # Identify x coordinate of the current sheet
+        cs_loc_height = 0.98
+        cs_loc = rad_buffer_obj.ray([-0.05, cs_loc_height, z_coord],
+                                    [0.05, cs_loc_height, z_coord])  # Identify x coordinate of the current sheet
         print("Export profile of j_z from the yt ray: %s seconds" % (time.time() - start_time))
         cs_loc_profile = cs_loc[('gas', 'current_density')].value
-        cs_max_x_coord = cs_loc.argmax(('gas', 'current_density'))[0].value
+        cs_x_coords = cs_loc.fcoords.value[:, 0]  # cs_profile ray coordinates along x
 
         cs_width_pix = 3  # three pixels
         print("Export profile of j_z from the yt ray: %s seconds" % (time.time() - start_time))
+        # Use gaussian fit to identify center of the current sheet
+        H, A, x0, sigma = gauss_fit(cs_x_coords, cs_loc_profile)
+        FWHM = 2.35482 * sigma
+        print('The center of the gaussian fit is', x0)
+        # cs_max_x_coord = cs_loc.argmax(('gas', 'current_density'))[0].value
+        cs_max_x_coord = x0
+
         cs_ray = rad_buffer_obj.ray([cs_max_x_coord, 0.0, z_coord], [cs_max_x_coord, 1.0, z_coord])
 
         cs_profile_coords = cs_ray.fcoords.value[:, 1]  # cs_profile ray coordinates along y
@@ -228,6 +259,7 @@ if __name__ == '__main__':
         # divider2 = make_axes_locatable(ax)
         ax11 = divider.append_axes("left", size="40%", pad=0.30)
         ax11.plot(cs_profile, cs_profile_coords, linewidth=0.65, color='indigo')
+
         #ax11.plot(np.gradient(cs_profile, np.linspace(0, 1, cs_profile.shape[0])),
         #          np.linspace(0, 1, cs_profile.shape[0]))
         ax11.set_ylim(0, 1)
@@ -297,15 +329,28 @@ if __name__ == '__main__':
         ax.scatter([cs_max_x_coord], [yp_ycoord_conv], marker='x', color='green')
         ax.axhline(y=yp_ycoord_conv, color='green', alpha=0.2)
 
-
         ax22 = divider.append_axes("bottom", size="25%", pad=0.5)
         ax22.plot(np.linspace(-0.05, 0.05, cs_loc_profile.shape[0]), cs_loc_profile, linewidth=0.65, color='magenta')
+        #ax22.plot(xdata, ydata_perfect, '-k', label='data (without_noise)')
+        ax22.plot(cs_x_coords, gauss(cs_x_coords,
+                                           *gauss_fit(cs_x_coords, cs_loc_profile)), '--r', label='fit')
+        # gauss_fit(cs_profile_coords, cs_loc_profile)
         ax22.axvline(x=cs_max_x_coord, color='red', alpha=0.95, linestyle='-', label='axvline - full height')
         ax22.set_ylabel('$j_z$')
         ax22.set_xlabel('x, code length')
 
-        plt.savefig('cur_dens_slices/current_density_slice_'+axis+'_'+f'{coord:.4f}'+'.png')
-        plt.close()
+        dir_name = './cur_dens_slices/'+'00'+f'{10*cur_time:.0f}'
+        # os.mkdir(dir_name)
+        Path(dir_name).mkdir(parents=True, exist_ok=True)
+        plt.savefig(dir_name+'/current_density_slice_'+axis+'_'+f'{coord:.4f}'+'.png')
+        #plt.close()
+
+        coords = cs_loc_profile
+        ypoint_coords['coordinates'].append((cs_max_x_coord, yp_ycoord_conv, coord)*cs_ray.fcoords.units)
         print(i)
 
+#%%
+with open('cur_dens_slices/y_points_'+'00'+f'{10*cur_time:.0f}'+'.pickle', 'wb') as handle:
+    pickle.dump(ypoint_coords, handle, protocol=pickle.HIGHEST_PROTOCOL)
+#%%
 print("--- %s seconds ---" % (time.time() - start_time))
