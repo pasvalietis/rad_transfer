@@ -18,6 +18,8 @@ from yt.visualization.image_writer import write_image
 import time  # To test runs in parallel
 
 from current_density import _current_density
+# Identify features in the current density profile
+from scipy.signal import argrelmin, find_peaks_cwt
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 
 start_time = time.time()
@@ -32,12 +34,85 @@ def find_roots(x,y):
     return x[:-1][s] + np.diff(x)[s]/(np.abs(y[1:][s]/y[:-1][s])+1)
 #%%
 
+
+def has_a_peak_counterpart(profile, coords, threshold, peak_range=np.arange(0.1, 0.5)):
+    """Checking whether a root (the intersection point of a current density profile) has a mirror counterpart on the
+     other side of the peak (local minimum or maximum).
+    :param profile: 1D profile to be analyzed to find a location of y-point
+    :type profile: 1D numpy array
+    :param coords: 1D profile containing profile coordinates
+    :type coords: 1D numpy array
+    :param threshold: level to identify location of the y-point (should be between 0.15 and 0.45)
+    :type threshold: float
+    :param peak_range: range to detect peaks using wavelet transform
+    :type peak_range: np.arange, default from 0.1 to 0.5
+    :return: bool array of initial root points, if intersection point (root) has a symmetric counterpart next to closest
+    peak
+    """
+
+    # init_idx = np.argmin(abs(cs_profile_coords - 0.96))
+    # half_idx = np.argmin(abs((cs_profile) - threshold * cs_profile[init_idx]))
+
+    '''
+    Find the roots of the original profile, where it intersects with a specific threshold level
+    '''
+
+    # Determine the coordinates (float) of the intersection points between the profile and the threshold line
+    root_point_coords = find_roots(coords, profile - threshold)
+
+    # Find coordinates of local minima and maxima
+    minima = argrelmin(profile)
+    maxima = find_peaks_cwt(profile, peak_range)
+    # indices of coord array where extrema occur
+    ind_extrema = np.concatenate((minima[0], maxima), axis=0)
+    flags = np.full(len(int_point_coords), True)
+
+    for point_idx in range(len(int_point_coords)): # iterate over root points array
+        point_coord_idx = np.abs(coords - root_point_coords[point_idx]).argmin()
+        point_coord = coords[point_coord_idx]
+
+        # Identify closest peak
+        peaks_coords = coords[ind_extrema]
+        closest_peak_idx = np.abs(peaks_coords - point_coord).argmin()
+        closest_peak_coord = peaks_coords[closest_peak_idx]
+        # distance to peak
+        peak_dist = closest_peak_coord - point_coord
+
+        # Find a mirror counterpart at the closest peak location
+        step = np.diff(coords)
+        #mirr_point_coord = (np.where((root_point_coords > 355) & (arr < 357)))[0].size
+        if peak_dist > 0:
+            mp_idx = (np.where((root_point_coords > point_coord) & ((point_coord + 2*peak_dist) > root_point_coords)))[0] #.size
+            flags[mp_idx] = False
+            flags[point_idx] = True
+
+        else:
+            mp_idx = (np.where((root_point_coords < point_coord) & ((point_coord + 2 * peak_dist) < root_point_coords)))[0]  # .size
+            flags[mp_idx] = False
+            flags[point_idx] = True
+
+        #np.isclose(0.5378, 0.5400, atol=0.001)
+        #mirror_element = coords[np.where(np.isclose(0.5378, 0.5400, atol=0.001))]
+
+        # if there is a mirror root, set flag to False
+
+    y_point_coord = root_point_coords[np.where(flags == True)][0]
+    print(' ---------- y-point filtering routine ----------')
+    print('flags: ', flags)
+    print('y-point coordinate', y_point_coord)
+    print(' -----------------------------------------------')
+    # pick a first result as a position of y point
+
+    return y_point_coord
+#%%
+
 if __name__ == '__main__':
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
 
     # sample j_z dataset
-    downs_file_path = ds_dir + '/subs_3_flarecs-id_0054.h5'
+    downs_file_path = ds_dir + '/subs_3_flarecs-id_0048.h5'
     dataset = yt.load(downs_file_path, hint="YTGridDataset")
+    cur_time = dataset.current_time.value.item()
 
     rad_buffer_obj = dataset
     grad_fields_x = rad_buffer_obj.add_gradient_fields(("gas", "magnetic_field_x"))
@@ -69,7 +144,7 @@ if __name__ == '__main__':
 
         coord = coord_range[i]
         if nslices == 1:
-            coord = -0.2500
+            coord = -0.1389
 
         if i == 0 or i == nslices - 1:
             coord = np.trunc(coord*1e3)/1e3  # floor the coordinate to avoid including the edges of the domain
@@ -101,7 +176,7 @@ if __name__ == '__main__':
         cs_profile_coords = cs_ray.fcoords.value[:, 1]  # cs_profile ray coordinates along y
 
         cs_slit = np.zeros((cs_ray.fcoords[:, 0].shape[0], cs_width_pix))
-#%%
+
         print("Create a cut along RCS: %s seconds" % (time.time() - start_time))
         for j in range(cs_width_pix):
             dx = 0.0045
@@ -113,7 +188,7 @@ if __name__ == '__main__':
             print("Export j_z data in the ray_"+ str(j) + ": %s seconds" % (time.time() - start_time))
             max_val = cs_ray[('gas', 'current_density')].value[idx_max] #.max()
             cs_slit[:, j] = cs_ray[('gas', 'current_density')].value
-#%%
+
         # cs_profile = cs_ray[('gas', 'current_density')].value
         # Find average value along the slit
         #cs_profile = np.sqrt(np.mean(cs_slit, axis=1)/ max_val)
@@ -126,7 +201,7 @@ if __name__ == '__main__':
         kernel = np.ones(kernel_size) / kernel_size
         data_convolved = np.convolve(cs_profile, kernel, mode='same')
 
-#%%
+
         # plt.plot(np.linspace(0, 1, cs_profile.shape[0]), cs_profile)
 
 #%%
@@ -148,7 +223,7 @@ if __name__ == '__main__':
         ax.set_yticks([])
         ax.axvline(x=cs_max_x_coord, color='magenta', alpha=0.5,  linestyle='--', label='axvline - full height')
 
-        ax.set_title("Current density $j_z$, "+axis+"="+f'{coord:.4f}')
+        ax.set_title("Current density $j_z$, "+axis+"="+f'{coord:.4f}'+', timestep = '+f'{cur_time:.1f}')
 
         # divider2 = make_axes_locatable(ax)
         ax11 = divider.append_axes("left", size="40%", pad=0.30)
@@ -196,21 +271,25 @@ if __name__ == '__main__':
 
         #data_convolved
         init_idx = np.argmin(abs(cs_profile_coords - 0.96))
-        half_idx = np.argmin(abs((data_convolved) - 0.30 * cs_profile[init_idx]))
+        half_idx = np.argmin(abs((data_convolved) - 0.15 * cs_profile[init_idx]))
         # determine intersections
-        int_point_coords = find_roots(cs_profile_coords, data_convolved - 0.30 * cs_profile[init_idx])
+        int_point_coords = find_roots(cs_profile_coords, data_convolved - 0.15 * cs_profile[init_idx])
         # keep intersection points that are not llocated around local minima or maxima (filter symmetric roots)
+
         '''
         # coords of local minima:
         from scipy.signal import argrelmin
         argrelmin(data_convolved) 
         # coords of local maxima:
-        from scipy import signal
-        peakind = signal.find_peaks_cwt(data_convolved, np.arange(0.1,0.5))
+        from scipy.signal import find_peaks_cwt
+        peakind = find_peaks_cwt(data_convolved, np.arange(0.1,0.5))
         *or*
         peaks, _ = find_peaks(data_convolved)
         '''
-        yp_ycoord_conv = cs_profile_coords[half_idx]
+
+        # has_a_peak_counterpart(profile, coords, threshold)
+
+        yp_ycoord_conv = has_a_peak_counterpart(data_convolved, cs_profile_coords, 0.15) # cs_profile_coords[half_idx]
 
         ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='red')
         ax.axhline(y=yp_ycoord, color='red', alpha=0.2)
