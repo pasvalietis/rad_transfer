@@ -1,0 +1,9 @@
+#+TITLE: Task list and progress report for rad_transfer package
+
+* time-distance branch
+  # Investigating the spatial/temporal dynamics of y-points and observational signatures
+  # To check a checkbox in emacs press C-c C-c
+- [ ] Identifying locations of y-points
+** TODO use the peak of velocity divergence to filter actual interval where y=point can be located
+- [ ] 
+ 
