@@ -178,14 +178,20 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     x = x[i_r]
     y = y[i_r]
     z = z[i_r]
+    dx = dx[i_r]
+    dy = dy[i_r]
+    dz = dz[i_r]
 
-    # Calculate the length of the loop based on the angle between the start and end points.
     # Define the vectors v1 and v2
     v1 = np.array([x[0].value, y[0].value, z[0].value]) * x[0].unit
     v2 = np.array([x[-1].value, y[-1].value, z[-1].value]) * x[0].unit
 
+    # v1 = np.array([dx[0].value, dy[0].value, dz[0].value]) * dx[0].unit
+    # v2 = np.array([dx[-1].value, dy[-1].value, dz[-1].value]) * dx[0].unit
+
     # Use the cross product to determine the orientation
-    cross_product = np.cross(v1, v2)
+    # positive for x, y, z, negative for dx, dy dz (for correct alignment)
+    cross_product = np.cross(v1, v2) if az.value < 90 else -np.cross(v1, v2)
 
     # Normal Vector
     norm0 = cross_product / np.linalg.norm(cross_product)
@@ -225,6 +231,7 @@ with open(map_path, 'rb') as f:
 
 # Path to clb loop parameters
 # params_path = clb_path + 'loop_params/2012/front_2012.pkl'
+# params_path = './loop_params/2012/front_2012.pkl'
 params_path = './loop_params/2012/front_2012_testing.pkl'
 
 
@@ -253,5 +260,6 @@ coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, [img], pkl=params_path)
 plt.show()
 plt.close()
 
+# coronal_loop1.save_params_to_pickle('2012/front_2012.pkl')
 coronal_loop1.save_params_to_pickle('2012/front_2012_testing.pkl')
 
