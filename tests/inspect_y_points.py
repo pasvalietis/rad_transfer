@@ -28,6 +28,9 @@ from current_density import _divergence
 # Identify features in the current density profile
 from scipy.signal import argrelmin, find_peaks_cwt
 from scipy.optimize import curve_fit
+
+from skimage import filters
+
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 
 start_time = time.time()
@@ -53,9 +56,9 @@ def gauss_fit(x, y):
 def find_roots(x,y):
     s = np.abs(np.diff(np.sign(y))).astype(bool)
     return x[:-1][s] + np.diff(x)[s]/(np.abs(y[1:][s]/y[:-1][s])+1)
+
+
 #%%
-
-
 def has_a_peak_counterpart(profile, coords, threshold, peak_range=np.arange(0.1, 0.5)):
     """Checking whether a root (the intersection point of a current density profile) has a mirror counterpart on the
      other side of the peak (local minimum or maximum).
@@ -127,9 +130,9 @@ def has_a_peak_counterpart(profile, coords, threshold, peak_range=np.arange(0.1,
     print(' -----------------------------------------------')
     # pick a first result as a position of y point
     return y_point_coord
+
+
 #%%
-
-
 def ypoint_using_divv(jz_profile, divv_profile, coords, threshold, peak_range=np.arange(0.1, 0.5)):
     """Identifying position of the y-point given custom current density profile and velocity divergence field
     :param jz_profile: current density z component profile
@@ -156,7 +159,17 @@ def ypoint_using_divv(jz_profile, divv_profile, coords, threshold, peak_range=np
 
 
 #%%
+def identify_edges(slice_2d):
+    """
+    Identify edges on the 2D slice of the current density distribution j_z using Sobel filter
+    :param slice_2d: 2D slice in XY plane containing j_z values to identify where current sheet bifurcates
+    :return: processed_profile
+    """
+    edge_sobel = filters.sobel(slice_2d)
+    return edge_sobel
 
+
+#%%
 if __name__ == '__main__':
 
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
@@ -291,7 +304,7 @@ if __name__ == '__main__':
             im = ax.imshow(jz_arr, origin='lower', vmin=8e-7, vmax=1e-5, cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
         else:
             im = None
-
+#%%
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(ax)
         cax1 = divider.append_axes("right", size="5%", pad=0.05)
