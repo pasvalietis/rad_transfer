@@ -21,7 +21,10 @@ from yt.visualization.image_writer import write_image
 
 import time  # To test runs in parallel
 
+# import tools to calculate derived physical quantities
 from current_density import _current_density
+from current_density import _divergence
+
 # Identify features in the current density profile
 from scipy.signal import argrelmin, find_peaks_cwt
 from scipy.optimize import curve_fit
@@ -123,11 +126,39 @@ def has_a_peak_counterpart(profile, coords, threshold, peak_range=np.arange(0.1,
     print('y-point coordinate', y_point_coord)
     print(' -----------------------------------------------')
     # pick a first result as a position of y point
-
     return y_point_coord
 #%%
 
+
+def ypoint_using_divv(jz_profile, divv_profile, coords, threshold, peak_range=np.arange(0.1, 0.5)):
+    """Identifying position of the y-point given custom current density profile and velocity divergence field
+    :param jz_profile: current density z component profile
+    :param div(v) profile: velocity divergence profile along RCS
+    :param coords: spatial coordinate axis
+    :param threshold: threshold to identify intersections with current density profile
+    :param peak_range: range to identify locations of peaks
+    :return:
+    """
+    '''
+    Find the roots of the original profile, where it intersects with a specific threshold level
+    '''
+
+    # Determine the coordinates (float) of the intersection points between the profile and the threshold line
+    root_point_coords = find_roots(coords, jz_profile - threshold)
+    divv_peak = np.max(divv_profile)
+    divv_peak_idx = np.abs(divv_profile - divv_peak).argmin()
+    divv_peak_coord = coords[divv_peak_idx]
+
+    y_point_idx = np.abs(coords - divv_peak_coord).argmin()
+    y_point_coord = coords[y_point_idx - 1]
+
+    return y_point_coord
+
+
+#%%
+
 if __name__ == '__main__':
+
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
 
     # sample j_z dataset
@@ -140,6 +171,7 @@ if __name__ == '__main__':
     grad_fields_y = rad_buffer_obj.add_gradient_fields(("gas", "magnetic_field_y"))
     grad_fields_z = rad_buffer_obj.add_gradient_fields(("gas", "magnetic_field_z"))
 
+    # calculating current density derived field
     rad_buffer_obj.add_field(
         ("gas", "current_density"),
         function=_current_density,
@@ -149,10 +181,20 @@ if __name__ == '__main__':
         force_override=True
         # validators=[ValidateParameter(["center", "bulk_velocity"])],
     )
+#%%
+    # add velocity divergence field to constraint the region containing y-point
+    rad_buffer_obj.add_field(
+        name=("gas", "divergence"),
+        function=_divergence,
+        sampling_type="local",
+        units="dimensionless",
+        force_override=True,
+    )
+
 
     #%%
     # make a cut along x = 0
-    nslices = 20  # 20
+    nslices = 1  # 20
     axes = 'xyz'
     nax = 2
     axis = axes[nax]
@@ -164,10 +206,12 @@ if __name__ == '__main__':
     ypoint_coords = {'timestep': cur_time, 'coordinates': []}
 
     for i in range(nslices):
+#%%
+        print('SLICE # ', i)
 
         coord = coord_range[i]
         if nslices == 1:
-            coord = 0.2490
+            coord = 0.0714  # 0.2490
 
         if i == 0 or i == nslices - 1:
             coord = np.trunc(coord*1e3)/1e3  # floor the coordinate to avoid including the edges of the domain
@@ -207,6 +251,7 @@ if __name__ == '__main__':
         cs_profile_coords = cs_ray.fcoords.value[:, 1]  # cs_profile ray coordinates along y
 
         cs_slit = np.zeros((cs_ray.fcoords[:, 0].shape[0], cs_width_pix))
+        vdiv_slit = np.copy(cs_slit)
 
         print("Create a cut along RCS: %s seconds" % (time.time() - start_time))
         for j in range(cs_width_pix):
@@ -219,22 +264,23 @@ if __name__ == '__main__':
             print("Export j_z data in the ray_"+ str(j) + ": %s seconds" % (time.time() - start_time))
             max_val = cs_ray[('gas', 'current_density')].value[idx_max] #.max()
             cs_slit[:, j] = cs_ray[('gas', 'current_density')].value
+            vdiv_slit[:, j] = cs_ray[('gas', 'divergence')].value
 
         # cs_profile = cs_ray[('gas', 'current_density')].value
         # Find average value along the slit
         #cs_profile = np.sqrt(np.mean(cs_slit, axis=1)/ max_val)
         init_profile = np.mean(cs_slit, axis=1) / np.mean(cs_slit, axis=1)[np.argmin(cs_profile_coords - 0.96)]
         single_pix_profile = cs_slit[:, 1] / cs_slit[:, 1][np.argmin(cs_profile_coords - 0.96)]
+
         cs_profile = (np.mean(cs_slit, axis=1) / max_val) ** 2. # np.mean(cs_slit, axis=1) # / max_val
+        vdiv_profile = np.mean(vdiv_slit, axis=1)
 
         # smoothing
         kernel_size = 10
         kernel = np.ones(kernel_size) / kernel_size
         data_convolved = np.convolve(cs_profile, kernel, mode='same')
 
-
         # plt.plot(np.linspace(0, 1, cs_profile.shape[0]), cs_profile)
-
 #%%
         print("Producing a matplotlib plot: %s seconds" % (time.time() - start_time))
         fig, ax = plt.subplots(1, 1, figsize=(8.0, 7.0))
@@ -258,7 +304,11 @@ if __name__ == '__main__':
 
         # divider2 = make_axes_locatable(ax)
         ax11 = divider.append_axes("left", size="40%", pad=0.30)
-        ax11.plot(cs_profile, cs_profile_coords, linewidth=0.65, color='indigo')
+        ax11.plot(cs_profile, cs_profile_coords, linewidth=0.65, color='indigo', label='$j_{z}$ profile')
+        # ax11.plot(init_profile, cs_profile_coords, label='init', linestyle='--')
+        # ax11.plot(single_pix_profile, cs_profile_coords, label='1Pix', linestyle='--')
+        # ax11.plot(data_convolved, cs_profile_coords, label='smooth', linestyle='--')
+        ax11.legend(loc='upper left')
 
         #ax11.plot(np.gradient(cs_profile, np.linspace(0, 1, cs_profile.shape[0])),
         #          np.linspace(0, 1, cs_profile.shape[0]))
@@ -270,16 +320,26 @@ if __name__ == '__main__':
         ax12 = ax11.twiny()
         color = 'tab:blue'
         #ax12.set_xlabel('$dj_z/dy$', color=color)  # we already handled the x-label with ax1
+
         y_cut = np.linspace(0, 1, cs_profile.shape[0])
         cs_der_y = np.gradient(cs_profile, y_cut)
         #ax12.plot(cs_der_y, y_cut, color=color, linewidth=0.65, alpha=0.75)
-        ax12.plot(init_profile, cs_profile_coords, label='init', linestyle='--')
-        ax12.plot(single_pix_profile, cs_profile_coords, label='1Pix', linestyle='--')
-        ax12.plot(data_convolved, cs_profile_coords, label='smooth', linestyle='--')
-        ax12.legend()
+        ax12.plot(vdiv_profile, cs_profile_coords, label = r'$\nabla\cdot v$', color='r')
+
+        # Apply the convolution
+        #ax12.plot(np.convolve(cs_profile, vdiv_profile, 'same'), cs_profile_coords, label = r'$(\nabla\cdot v)*j_z$',
+        #          color='darkgreen')
+        # Apply the cross-correlation
+        # ax12.plot(np.correlate(cs_profile, vdiv_profile, 'same'), cs_profile_coords,
+        #           label=r'$(\nabla\cdot v)\star j_z$', color='darkgoldenrod')
+        # find the product of two functions
+        ax12.plot(np.multiply(cs_profile, np.exp(vdiv_profile) - np.ones_like(vdiv_profile)), cs_profile_coords,
+                           label=r'$(\nabla\cdot v)\cdot j_z$', color='dimgrey')
+
         ax12.tick_params(axis='y', labelcolor=color)
-        ax12.set_ylim(0, 1)
-        ax12.set_xlim(0., 1.0)
+        ax12.legend(loc='lower right')
+        #ax12.set_ylim(0, 1)
+        #ax12.set_xlim(0., 1.0)
         # ax12.set_xlim(0.25*cs_der_y.min(), 0.25*cs_der_y.max())
 
         '''
@@ -287,6 +347,7 @@ if __name__ == '__main__':
         '''
         crd_idx = cs_der_y[np.where((cs_profile_coords > 0.75) & (cs_profile_coords < 0.95))].argmax()
         yp_ycoord = cs_profile_coords[np.where((cs_profile_coords > 0.75) & (cs_profile_coords < 0.95))][crd_idx]
+
         # ax.axhline(y=yp_ycoord, color='magenta', alpha=0.2)
         # Plot the location of the y point
         # ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='magenta')
@@ -309,10 +370,10 @@ if __name__ == '__main__':
         # keep intersection points that are not llocated around local minima or maxima (filter symmetric roots)
 
         '''
-        # coords of local minima:
+        # Coords of local minima:
         from scipy.signal import argrelmin
         argrelmin(data_convolved) 
-        # coords of local maxima:
+        # Coords of local maxima:
         from scipy.signal import find_peaks_cwt
         peakind = find_peaks_cwt(data_convolved, np.arange(0.1,0.5))
         *or*
@@ -323,11 +384,16 @@ if __name__ == '__main__':
 
         yp_ycoord_conv = has_a_peak_counterpart(data_convolved, cs_profile_coords, 0.15) # cs_profile_coords[half_idx]
 
+        yp_ycoord_divv = ypoint_using_divv(data_convolved, vdiv_profile, cs_profile_coords, 0.3)
+
         ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='red')
         ax.axhline(y=yp_ycoord, color='red', alpha=0.2)
 
         ax.scatter([cs_max_x_coord], [yp_ycoord_conv], marker='x', color='green')
         ax.axhline(y=yp_ycoord_conv, color='green', alpha=0.2)
+
+        ax.scatter([cs_max_x_coord], [yp_ycoord_divv], marker='x', color='darkblue')
+        ax.axhline(y=yp_ycoord_divv, color='darkblue', alpha=0.2)
 
         ax22 = divider.append_axes("bottom", size="25%", pad=0.5)
         ax22.plot(np.linspace(-0.05, 0.05, cs_loc_profile.shape[0]), cs_loc_profile, linewidth=0.65, color='magenta')
