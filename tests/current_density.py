@@ -30,8 +30,14 @@ from read_timeseries import read_dataset
 import gc
 
 #%%
+def _convergence(field, data):
+    norm = yt.YTQuantity(1.0, "s")
+    return (-norm*data["gas", "velocity_divergence"])
 
-#%%
+def _divergence(field, data):
+    norm = yt.YTQuantity(1.0, "s")
+    return (norm * data["gas", "velocity_divergence"])
+
 def _current_density(field, data):
     #Z component of current density
     norm = yt.YTQuantity(1.0, "s")
