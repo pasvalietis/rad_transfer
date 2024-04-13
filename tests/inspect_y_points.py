@@ -26,8 +26,12 @@ from current_density import _current_density
 from current_density import _divergence
 
 # Identify features in the current density profile
+import cv2 as cv
 from scipy.signal import argrelmin, find_peaks_cwt
 from scipy.optimize import curve_fit
+
+from skimage.morphology import skeletonize, thin
+from skimage.util import invert
 
 from skimage import filters
 
@@ -39,11 +43,12 @@ yt.enable_parallelism()
 def detect_sharp_slope(arr):
     pass
 
-'''
-Gaussian fits, from 
-https://gist.github.com/cpascual/a03d0d49ddd2c87d7e84b9f4ad2df466
-'''
+
 def gauss(x, H, A, x0, sigma):
+    '''
+    Gaussian fits, from
+    https://gist.github.com/cpascual/a03d0d49ddd2c87d7e84b9f4ad2df466
+    '''
     return H + A * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2))
 
 def gauss_fit(x, y):
@@ -165,11 +170,53 @@ def identify_edges(slice_2d):
     :param slice_2d: 2D slice in XY plane containing j_z values to identify where current sheet bifurcates
     :return: processed_profile
     """
-    edge_sobel = filters.sobel(slice_2d)
-    return edge_sobel
+    import cv2 as cv
+    from PIL import Image
+
+    imag = np.copy(slice_2d)
+
+    # gray = slice_2d # cv.cvtColor(slice_2d, cv.COLOR_BGR2GRAY)
+    # h,w = slice_2d.shape
+    # vis2 = cv.CreateMat(h, w, cv.CV_32FC3)
+    # vis0 = cv.fromarray(slice_2d)
+
+    # normalize input 2d current distribution and convert to np.float32 to create an OpenCV image
+    # to fix openCV depth issue:
+    # https://stackoverflow.com/questions/55179724/opencv-error-unsupported-depth-of-input-image
+    # #edge_sobel = filters.sobel_h(slice_2d)
+    img_float32 = filters.sobel(np.float32(imag / np.max(imag)))
+    # assume that img_float32 is already a grayscale image
+    #  vis2 = cv.cvtColor(img_float32, cv.COLOR_BGR2GRAY)
+
+    corners = cv.goodFeaturesToTrack(img_float32, 25, 0.01, 10)
+    corners = np.int0(corners)
+
+    for i in corners:
+        x, y = i.ravel()
+        cv.circle(imag, (x, y), 3, 255, -1)
+
+    return [imag, corners]
 
 
 #%%
+def skeletonize_slice(slice_2d):
+
+    norm_slice = np.float32(slice_2d / np.max(slice_2d))
+    edges_filtered = filters.sobel(norm_slice)
+
+    alpha = 2.15 # 2.25  # Define alpha (contrast control)
+    beta = 0  # Define beta (brightness control)
+    # Adjust the contrast
+    high_contrast_image = cv.convertScaleAbs(norm_slice, alpha=alpha, beta=beta)
+
+    imag = high_contrast_image # high_contrast_image
+    skeleton = thin(imag)# high_contrast_image # thin(imag)
+    #skeleton2 = skeletonize(skeleton1)
+
+    return imag
+
+#%%
+
 if __name__ == '__main__':
 
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
@@ -194,8 +241,7 @@ if __name__ == '__main__':
         force_override=True
         # validators=[ValidateParameter(["center", "bulk_velocity"])],
     )
-#%%
-    # add velocity divergence field to constraint the region containing y-point
+#%% # add velocity divergence field to constraint the region containing y-point
     rad_buffer_obj.add_field(
         name=("gas", "divergence"),
         function=_divergence,
@@ -205,8 +251,7 @@ if __name__ == '__main__':
     )
 
 
-    #%%
-    # make a cut along x = 0
+    #%% make a cut along x = 0
     nslices = 1  # 20
     axes = 'xyz'
     nax = 2
@@ -224,7 +269,7 @@ if __name__ == '__main__':
 
         coord = coord_range[i]
         if nslices == 1:
-            coord = 0.0714  # 0.2490
+            coord = -0.0921 # 0.0714  # 0.2490
 
         if i == 0 or i == nslices - 1:
             coord = np.trunc(coord*1e3)/1e3  # floor the coordinate to avoid including the edges of the domain
@@ -241,6 +286,7 @@ if __name__ == '__main__':
             z_coord = coord
         else:
             z_coord = None
+
 #%%
         print("Cast a yt ray: %s seconds" % (time.time() - start_time))
         cs_loc_height = 0.98
@@ -301,7 +347,15 @@ if __name__ == '__main__':
         if axis == 'x':
             im = ax.imshow(np.rot90(jz_arr), origin='upper', vmin=8e-7, vmax=1e-5, cmap=im_cmap)
         elif axis == 'z':
-            im = ax.imshow(jz_arr, origin='lower', vmin=8e-7, vmax=1e-5, cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
+            # im = ax.imshow(jz_arr, origin='lower', vmin=8e-7, vmax=1e-5, cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
+            # im = ax.imshow(jz_arr, origin='lower', cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
+            im = ax.imshow(skeletonize_slice(jz_arr), origin='lower', cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
+            #points = np.squeeze(identify_edges(jz_arr)[1])
+            #[np.where(np.squeeze(identify_edges(jz_arr)[1])[:, 1] > 204)]
+            #points_x, points_y = points[:, 0]/512 - 0.5*np.ones_like(points[:,1]), points[:, 1]/512
+            #ax.scatter(points_x, points_y, color='r', marker='+', alpha=0.2)
+            #ax.scatter(np.median(points_x), np.median(points_y), marker='*', color='k', s=100)
+            # identify_edges(jz_arr)[0]
         else:
             im = None
 #%%
@@ -421,7 +475,7 @@ if __name__ == '__main__':
         dir_name = './cur_dens_slices/'+'00'+f'{10*cur_time:.0f}'
         # os.mkdir(dir_name)
         Path(dir_name).mkdir(parents=True, exist_ok=True)
-        plt.savefig(dir_name+'/current_density_slice_'+axis+'_'+f'{coord:.4f}'+'.png')
+        plt.savefig(dir_name+'/current_density_slice_'+axis+'_'+f'{coord:.4f}'+'.png', dpi=150)
         #plt.close()
 
         coords = cs_loc_profile
