@@ -7,9 +7,11 @@ return the image with overplotted y points
 
 import os
 import sys
+import pickle
 
 import yt
 from astropy.time import Time, TimeDelta
+
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
@@ -28,6 +30,12 @@ if __name__ == '__main__':
 
     synth_map = gen_map_from_timeseries(dataset, start_time, timescale=109.8)
 
+    # Read y-point dictionary from a pickle file:
+    pickle_file_name = './cur_dens_slices/y_points_0050.pickle'
+    with open(pickle_file_name, 'rb') as yfile:
+        y_points = pickle.load(yfile)
+
+    sample_point = y_points['coordinates'][17]
 
 
 #  main()
