@@ -36,14 +36,11 @@ def read_dataset(ds_dir):
     return ts
 
 #%%
-def gen_map_from_timeseries(ds, start_time, timescale=109.8):
+def gen_map_from_timeseries(ds, start_time, timescale=109.8, instr='aia', channel = 131):
     cut_box = ds.region(center=[0.0, 0.5, 0.0], left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 
     timestep = ds.current_time.value.item()
     timediff = TimeDelta(timestep * timescale * u.s)
-
-    instr = 'aia'  # aia or xrt
-    channel = 131
 
     aia_synthetic = synt_img(cut_box, instr, channel)
     samp_resolution = 584  # cusp_submap.data.shape[0]
@@ -70,6 +67,7 @@ def gen_map_from_timeseries(ds, start_time, timescale=109.8):
                                                  reference_pixel=reference_pixel)
 
     return synth_map
+
 
 #%%
 def download_maps():

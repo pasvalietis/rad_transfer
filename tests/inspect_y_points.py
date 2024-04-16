@@ -14,6 +14,7 @@ from pathlib import Path
 import copy
 import numpy as np
 import pickle
+import itertools
 
 import yt
 import unyt
@@ -27,6 +28,7 @@ from current_density import _divergence
 
 # Identify features in the current density profile
 import cv2 as cv
+import scipy.ndimage as ndi
 from scipy.signal import argrelmin, find_peaks_cwt
 from scipy.optimize import curve_fit
 
@@ -204,18 +206,91 @@ def skeletonize_slice(slice_2d):
     norm_slice = np.float32(slice_2d / np.max(slice_2d))
     edges_filtered = filters.sobel(norm_slice)
 
-    alpha = 2.15 # 2.25  # Define alpha (contrast control)
+    alpha = 4.45  #2.85  # 2.15  # 2.25  # Define alpha (contrast control)
     beta = 0  # Define beta (brightness control)
     # Adjust the contrast
     high_contrast_image = cv.convertScaleAbs(norm_slice, alpha=alpha, beta=beta)
 
-    imag = high_contrast_image # high_contrast_image
-    skeleton = thin(imag)# high_contrast_image # thin(imag)
+    imag = high_contrast_image  # high_contrast_image  # high_contrast_image
+    skeleton = thin(imag)  # high_contrast_image # thin(imag)
     #skeleton2 = skeletonize(skeleton1)
 
-    return imag
+    return skeleton
+
 
 #%%
+def compress_true_values(array):
+    # If inside 1d bool array there are several consecutive values, replace them with a single True value
+    # Use itertools.groupby to group consecutive True values
+    grouped = [(k, list(g)) for k, g in itertools.groupby(array)]
+    # Replace consecutive True values with a single True
+    compressed = [k for k, g in grouped]
+    return compressed
+
+
+#%%
+def identify_y_from_branch(skeleton, gauss_fit_params):
+    """
+    Determine locations of branch points from the skeletonized image
+    Find y point as the lowest branch point that is still above all ALT branch points
+    Filter the lowest ALT branch points by identifying the excess of a given threshold in the 2sigma range
+    in the vicinity of the RCS
+    * Identify y-points morphologically from the 2d skeleton *
+    Using code to identify locations of the branch points from:
+    https://stackoverflow.com/questions/43037692/how-to-find-branch-point-from-binary-skeletonize-image
+    or similarly just call OpenCV function findNonZero
+    branch_points = cv2.findNonZero(skeleton_image)
+    :param skeleton: s
+    :param gauss_fit_params: H, A, x0, sigma, RCS coordinate and FWHM
+    :return: yp coordinate
+    """
+
+    H, A, x0, sigma = gauss_fit_params
+    sigmaRCS = 2.5 * sigma
+
+    surroundings = list()
+    surroundings.append(np.array([[0, 1, 0], [1, 1, 1], [0, 0, 0]]))
+    surroundings.append(np.array([[1, 0, 1], [0, 1, 0], [1, 0, 0]]))
+    surroundings.append(np.array([[1, 0, 1], [0, 1, 0], [0, 1, 0]]))
+    surroundings.append(np.array([[0, 1, 0], [1, 1, 0], [0, 0, 1]]))
+    surroundings.append(np.array([[0, 0, 1], [1, 1, 1], [0, 1, 0]]))
+
+    surroundings = [np.rot90(surroundings[i], k=j) for i in range(5) for j in range(4)]
+
+    branches = np.zeros_like(skeleton, dtype=bool)
+    for cluster in surroundings:
+        '''
+        scipy.ndimage.binary_hit_or_miss identifies a pattern in a given image
+        '''
+        branches |= ndi.binary_hit_or_miss(skeleton, cluster)
+
+    branches_coords = np.where(branches.transpose() == True)
+
+    # Iterate over the branch points.
+    candidate_ypoints = []
+    paired_coordinates = np.array(list(zip(*branches_coords)))
+    for x, y in paired_coordinates:
+        # identify if the branch point is from the ALT region
+        slice_1d = skeleton[y, :]
+        # Filter out branch points in the ALT region
+        if np.count_nonzero(compress_true_values(slice_1d)) == 1:
+            print('candidate point: ', x, y, 'count ', np.count_nonzero(compress_true_values(slice_1d)))
+            point = (x, y)
+            # check if point is within the 3\sigma distance from RCS
+            x_coord = x/512. - 0.5
+
+            if (x0 - sigmaRCS) <= x_coord <= (x0 + sigmaRCS):
+                candidate_ypoints.append(point)
+
+    # Find the branch point at the bottom of the RCS -- 'actual y point'
+    ypts = np.array(candidate_ypoints)
+    indices = np.argsort(-ypts[:, 1])
+    sorted_ypts = ypts[indices]
+    ypoint = sorted_ypts[-1]
+    # coordinate = None
+    return np.array(ypoint)
+#%%
+
 
 if __name__ == '__main__':
 
@@ -241,6 +316,7 @@ if __name__ == '__main__':
         force_override=True
         # validators=[ValidateParameter(["center", "bulk_velocity"])],
     )
+
 #%% # add velocity divergence field to constraint the region containing y-point
     rad_buffer_obj.add_field(
         name=("gas", "divergence"),
@@ -250,9 +326,8 @@ if __name__ == '__main__':
         force_override=True,
     )
 
-
     #%% make a cut along x = 0
-    nslices = 1  # 20
+    nslices = 20  # 20
     axes = 'xyz'
     nax = 2
     axis = axes[nax]
@@ -269,7 +344,9 @@ if __name__ == '__main__':
 
         coord = coord_range[i]
         if nslices == 1:
-            coord = -0.0921 # 0.0714  # 0.2490
+            coord = - 0.1974  # 0.0714  # 0.2490
+        else:
+            plt.ioff()
 
         if i == 0 or i == nslices - 1:
             coord = np.trunc(coord*1e3)/1e3  # floor the coordinate to avoid including the edges of the domain
@@ -299,7 +376,8 @@ if __name__ == '__main__':
         cs_width_pix = 3  # three pixels
         print("Export profile of j_z from the yt ray: %s seconds" % (time.time() - start_time))
         # Use gaussian fit to identify center of the current sheet
-        H, A, x0, sigma = gauss_fit(cs_x_coords, cs_loc_profile)
+        gauss_fit_params = gauss_fit(cs_x_coords, cs_loc_profile)
+        H, A, x0, sigma = gauss_fit_params
         FWHM = 2.35482 * sigma
         print('The center of the gaussian fit is', x0)
         # cs_max_x_coord = cs_loc.argmax(('gas', 'current_density'))[0].value
@@ -342,6 +420,7 @@ if __name__ == '__main__':
         # plt.plot(np.linspace(0, 1, cs_profile.shape[0]), cs_profile)
 #%%
         print("Producing a matplotlib plot: %s seconds" % (time.time() - start_time))
+
         fig, ax = plt.subplots(1, 1, figsize=(8.0, 7.0))
         im_cmap = 'BuPu'  #RdBu_r
         if axis == 'x':
@@ -349,7 +428,11 @@ if __name__ == '__main__':
         elif axis == 'z':
             # im = ax.imshow(jz_arr, origin='lower', vmin=8e-7, vmax=1e-5, cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
             # im = ax.imshow(jz_arr, origin='lower', cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
-            im = ax.imshow(skeletonize_slice(jz_arr), origin='lower', cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
+            im = ax.imshow(jz_arr, origin='lower', vmin=8e-7, vmax=1e-5, cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
+            im = ax.imshow(skeletonize_slice(jz_arr), origin='lower', cmap='Reds', extent=(-0.5, 0.5, 0, 1.0), alpha = 0.25)
+            branches = identify_y_from_branch(skeletonize_slice(jz_arr), gauss_fit_params)
+            ax.scatter(branches[0] / 512 - 0.5 * np.ones_like(branches[0]), branches[1] / 512, color='k', marker='*')
+            # , extent = (-0.5, 0.5, 0, 1.0)
             #points = np.squeeze(identify_edges(jz_arr)[1])
             #[np.where(np.squeeze(identify_edges(jz_arr)[1])[:, 1] > 204)]
             #points_x, points_y = points[:, 0]/512 - 0.5*np.ones_like(points[:,1]), points[:, 1]/512
@@ -453,21 +536,20 @@ if __name__ == '__main__':
 
         yp_ycoord_divv = ypoint_using_divv(data_convolved, vdiv_profile, cs_profile_coords, 0.3)
 
-        ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='red')
-        ax.axhline(y=yp_ycoord, color='red', alpha=0.2)
-
-        ax.scatter([cs_max_x_coord], [yp_ycoord_conv], marker='x', color='green')
-        ax.axhline(y=yp_ycoord_conv, color='green', alpha=0.2)
-
-        ax.scatter([cs_max_x_coord], [yp_ycoord_divv], marker='x', color='darkblue')
-        ax.axhline(y=yp_ycoord_divv, color='darkblue', alpha=0.2)
+        # ax.scatter([cs_max_x_coord], [yp_ycoord], marker='x', color='red')
+        # ax.axhline(y=yp_ycoord, color='red', alpha=0.2)
+        #
+        # ax.scatter([cs_max_x_coord], [yp_ycoord_conv], marker='x', color='green')
+        # ax.axhline(y=yp_ycoord_conv, color='green', alpha=0.2)
+        #
+        # ax.scatter([cs_max_x_coord], [yp_ycoord_divv], marker='x', color='darkblue')
+        # ax.axhline(y=yp_ycoord_divv, color='darkblue', alpha=0.2)
 
         ax22 = divider.append_axes("bottom", size="25%", pad=0.5)
         ax22.plot(np.linspace(-0.05, 0.05, cs_loc_profile.shape[0]), cs_loc_profile, linewidth=0.65, color='magenta')
-        #ax22.plot(xdata, ydata_perfect, '-k', label='data (without_noise)')
         ax22.plot(cs_x_coords, gauss(cs_x_coords,
                                            *gauss_fit(cs_x_coords, cs_loc_profile)), '--r', label='fit')
-        # gauss_fit(cs_profile_coords, cs_loc_profile)
+
         ax22.axvline(x=cs_max_x_coord, color='red', alpha=0.95, linestyle='-', label='axvline - full height')
         ax22.set_ylabel('$j_z$')
         ax22.set_xlabel('x, code length')
