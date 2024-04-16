@@ -6,6 +6,7 @@ sys.path.insert(1, '/home/saber/CoronalLoopBuilder')
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import astropy.units as u
 from astropy.coordinates import SkyCoord, spherical_to_cartesian as stc
 import sunpy.map
@@ -20,7 +21,7 @@ import pickle
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d
 
 # Method to create synthetic map of MHD data from rad_transfer
-def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_coord=None,
+def synthmap_plot(img, fig, normvector=None, northvector=None, plot=None, fm_coord=None,
                   **kwargs):
     """
 
@@ -89,12 +90,12 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
                                                  # reference_pixel=reference_pixel
                                                  )
 
-    if comp:
+    if plot == 'comp':
         comp = sunpy.map.Map(synth_map, img, composite=True)
-        comp.set_alpha(1, 0.50)
+        comp.set_alpha(0, 0.50)
         ax = fig.add_subplot(projection=comp.get_map(0))
         comp.plot(axes=ax)
-    else:
+    elif plot == 'synth':
         ax = fig.add_subplot(projection=synth_map)
         synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
 
@@ -102,14 +103,16 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
         pixels = synth_map.wcs.world_to_pixel(coord)
         # coord_img=img.reference_coordinate
         # pixels_img=img.wcs.world_to_pixel(coord_img)
-        # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
+        center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
         ax.plot_coord(coord, 'o', color='r')
         ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
         # ax.plot_coord(coord_img, 'o', color='b')
         # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
         # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
+    else:
+        ax = fig.add_subplot(projection=synth_map)
 
-    return ax
+    return ax, synth_map
 
 
 def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u.deg, el=90 * u.deg, az=0 * u.deg,
@@ -187,7 +190,7 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     v2 = np.array([x[-1].value, y[-1].value, z[-1].value]) * x[0].unit
 
     # Use the cross product to determine the orientation
-    cross_product = np.cross(v1, v2)
+    cross_product = np.cross(v1, v2) if az.value < 90 else -np.cross(v1, v2)
 
     # Normal Vector
     norm0 = cross_product / np.linalg.norm(cross_product)
@@ -249,11 +252,99 @@ fm = SkyCoord(lon=lon * u.deg, lat=lat * u.deg, radius=const.R_sun + hheight, fr
 
 # plot real and synthetic views
 fig = plt.figure()
-synth_axs = [synthmap_plot(img, fig, normvector=norm, northvector=north, comp=False, fm_coord=fm,
-                           instr='aia', channel=171)]
-coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, [img], pkl=params_path)
+synth_axs, synth_map = synthmap_plot(img, fig, normvector=norm, northvector=north, plot='synth', fm_coord=fm,
+                           instr='aia', channel=171)
+# coronal_loop1 = CoronalLoopBuilder(fig, synth_axs, [img], pkl=params_path)
+
+# plt.show()
+plt.close()
+
+# coronal_loop1.save_params_to_pickle('2013/front_2013_testing.pkl')
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Slit Intensity
+
+fig = plt.figure(constrained_layout=True, figsize=(10, 6))
+fig.set_tight_layout(True)
+plt.ioff()
+plt.style.use('fast')
+gs = fig.add_gridspec(3, 4)
+
+ax1 = fig.add_subplot(gs[:2, :2], projection=img)
+img.plot_settings['norm'] = colors.LogNorm(10, img.max())
+#img.plot_settings['cmap'] =
+img.plot(axes=ax1)
+ax1.grid(False)
+stonyhurst_grid = img.draw_grid(axes=ax1, system='stonyhurst', annotate=False)
+img.draw_limb()
+
+# Generate Normal and Synthetic Slits [x1, x2], [y1, y2]
+norm_slit = [[-925, -975], [220, 230]]
+perp_slit = [[-940, -950], [250, 190]]
+
+# Normal observation slit
+line_coords = SkyCoord(norm_slit[0], norm_slit[1], unit=(u.arcsec, u.arcsec),
+                           frame=img.coordinate_frame)  # [x1, x2], [y1, y2]
+intensity_coords = sunpy.map.pixelate_coord_path(img, line_coords)
+intensity = sunpy.map.sample_at_coords(img, intensity_coords)
+
+# Normal synthetic slit
+line_coords_ = SkyCoord(norm_slit[0], norm_slit[1], unit=(u.arcsec, u.arcsec),
+                       frame=synth_map.coordinate_frame)  # [x1, x2], [y1, y2]
+intensity_coords_ = sunpy.map.pixelate_coord_path(synth_map, line_coords_)
+intensity_ = sunpy.map.sample_at_coords(synth_map, intensity_coords_)
+
+# Perpendicular Observation Slit
+line_coords2 = SkyCoord(perp_slit[0], perp_slit[1], unit=(u.arcsec, u.arcsec),
+                       frame=img.coordinate_frame)  # [x1, x2], [y1, y2]
+intensity_coords2 = sunpy.map.pixelate_coord_path(img, line_coords2)
+intensity2 = sunpy.map.sample_at_coords(img, intensity_coords2)
+
+# Perpendicular Synthetic Slit
+line_coords2_ = SkyCoord(perp_slit[0], perp_slit[1], unit=(u.arcsec, u.arcsec),
+                       frame=synth_map.coordinate_frame)  # [x1, x2], [y1, y2]
+intensity_coords2_ = sunpy.map.pixelate_coord_path(synth_map, line_coords2_)
+intensity2_ = sunpy.map.sample_at_coords(synth_map, intensity_coords2_)
+
+angular_separation = intensity_coords.separation(intensity_coords[0]).to(u.arcsec)
+angular_separation_ = intensity_coords_.separation(intensity_coords_[0]).to(u.arcsec)
+
+angular_separation2 = intensity_coords2.separation(intensity_coords2[0]).to(u.arcsec)
+angular_separation2_ = intensity_coords2_.separation(intensity_coords2_[0]).to(u.arcsec)
+
+# Plot slits
+ax1.plot_coord(intensity_coords, color='magenta', linewidth=0.75)
+ax1.plot_coord(intensity_coords2, color='red', linewidth=0.75)
+
+ax2 = fig.add_subplot(gs[:2, 2:], projection=synth_map)
+synth_map.plot_settings['norm'] = colors.LogNorm(10, img.max())
+synth_map.plot_settings['cmap'] = img.plot_settings['cmap']
+synth_map.plot(axes=ax2)
+ax2.grid(False)
+stonyhurst_grid = synth_map.draw_grid(axes=ax2, system='stonyhurst', annotate=False)
+synth_map.draw_limb()
+
+ax2.text(200, 30,
+        'norm: '+str(list(float(i) for i in ["%.2f" % elem for elem in norm])) +
+        '\n'+'north: '+str(list(float(i) for i in ["%.2f" % elem for elem in north])),
+        style='italic', color='white')
+
+ax2.plot_coord(intensity_coords_, color='magenta', linewidth=0.75)
+ax2.plot_coord(intensity_coords2_, color='red', linewidth=0.75)
+
+plt.colorbar()
+
+ax3 = fig.add_subplot(gs[2, :])
+ax3.plot(angular_separation, intensity, linewidth=0.65, label='AIA', color='magenta')
+ax3.plot(angular_separation_, intensity_, linewidth=0.65, label='Synthetic', color='magenta', linestyle='--')
+
+ax3.plot(angular_separation2, intensity2, linewidth=0.65, color='red')
+ax3.plot(angular_separation2_, intensity2_, linewidth=0.65, color='red', linestyle='--')
+ax3.set_xlabel("Angular distance along slit [arcsec]")
+#ax3.set_ylabel(f"Intensity [{cusp_submap.unit}]")
+ax3.set_ylabel('$I$, [DN cm$^5$ pix$^{-1}$ s$^{-1}$]')
+ax3.set_yscale('log')
+ax3.legend(frameon=False, fontsize=10)
 
 plt.show()
 plt.close()
-
-coronal_loop1.save_params_to_pickle('2013/front_2013_testing.pkl')
