@@ -54,9 +54,11 @@ def gen_map_from_timeseries(ds, start_time, timescale=109.8, instr='aia', channe
     synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],
                            'north_vector': [np.sin(img_tilt).value, np.cos(img_tilt).value, 0.0]}
 
+    proj_params = synth_view_settings, synth_plot_settings
+
     aia_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
-                                image_shift=[-52, 105],
+                                image_shift=[0, 0],  # [-52, 105],
                                 bkg_fill=10)
 
     synth_map = aia_synthetic.make_synthetic_map(obstime=start_time+timediff,
@@ -66,7 +68,7 @@ def gen_map_from_timeseries(ds, start_time, timescale=109.8, instr='aia', channe
                                                  # reference_coord=reference_coord,
                                                  reference_pixel=reference_pixel)
 
-    return synth_map
+    return synth_map, proj_params
 
 
 #%%
