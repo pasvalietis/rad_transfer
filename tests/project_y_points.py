@@ -8,17 +8,21 @@ return the image with overplotted y points
 import os
 import sys
 import pickle
+import glob
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import yt
+import astropy.units as u
 from unyt import unyt_array
 from astropy.time import Time, TimeDelta
 
 sys.path.insert(0, '/home/ivan/Study/Astro/solar')
 
 from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
+from rad_transfer.visualization.colormaps import color_tables
 from read_timeseries import gen_map_from_timeseries
-
+from read_timeseries import read_dataset
 '''
 Generate synthetic AIA image for respective timeframe
 '''
@@ -52,38 +56,43 @@ def proj_points_2d_coords_in_imag(point, norm_vector, north_vector):
     proj_point = project_point_to_imag(point, norm_vector)
 
     # second vector orthogonal to the north_vector to define a pair of basis vectors of the image plane
-    base_vec = unyt_array(np.cross(north_vector, norm_vector), proj_point.units)
+    base_vec = unyt_array(np.cross(norm_vector, north_vector), proj_point.units)
     base_vec_1, base_vec_2 = north_vector, base_vec
     x = np.dot(point, base_vec_1)
-    y = np.dot(point, base_vec_2)
+    y = -np.dot(point, base_vec_2)
 
     return x, y
 
 #%%
 if __name__ == '__main__':
+    # %%
     start_time = Time('2011-03-07T12:30:00', scale='utc', format='isot')
+    # fns is a list of all the simulation data files in the current directory.
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
-    # sample j_z dataset
-    downs_file_path = ds_dir + '/subs_3_flarecs-id_0050.h5'
-    dataset = yt.load(downs_file_path, hint="YTGridDataset")
+    ts = read_dataset(ds_dir)
 
+    # sample j_z dataset
+    #downs_file_path = ds_dir + '/subs_3_flarecs-id_0050.h5'
+    #dataset = yt.load(downs_file_path, hint="YTGridDataset")
+#%%
+    
     # Read y-point dictionary from a pickle file:
     pickle_file_name = './cur_dens_slices/y_points_0050.pickle'
     with open(pickle_file_name, 'rb') as yfile:
         y_points = pickle.load(yfile)
 
     sample_point = y_points['coordinates'][17]
-#%%
+
     synth_map, proj_params = gen_map_from_timeseries(dataset, start_time, timescale=109.8)
     norm_vec = unyt_array(proj_params[0]['normal_vector'], sample_point.units)
     north_vec = unyt_array(proj_params[0]['north_vector'], sample_point.units)
-#%%
+
     projected_points = []
     for point in y_points['coordinates']:
         proj_point = proj_points_2d_coords_in_imag(point, norm_vec, north_vec)
         projected_points.append(proj_point)
         print('point', point, 'proj_point', proj_point)
-#%%
+
     rcs_bottom = np.array(projected_points)
 #%%
     # Display synthetic image
@@ -93,18 +102,22 @@ if __name__ == '__main__':
     N = proj_params[1]['resolution']
     # X, Y = np.mgrid[-0.5 * 150 * Mm_len:0.5 * 150 * Mm_len:complex(0, N),
     #        0 * Mm_len:150 * Mm_len:complex(0, N)]
-    ax.imshow(synth_map.data, origin='lower', extent=(-0.5, 0.5, 0, 1.0))
-    ax.scatter(rcs_bottom[:, 1] - 0.5, rcs_bottom[:, 0], color='r', marker='*')
+    vmin, vmax = 1e0, 3e2
+    ax.imshow(np.transpose(synth_map.data), origin='lower', extent=(-0.5, 0.5, 0, 1.0), norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+    ax.scatter(rcs_bottom[:, 1], rcs_bottom[:, 0], color='r', marker='+')
 #%%
    # Use yt plotting window with annotate_marker
     L = norm_vec  # vector normal to cutting plane
     north_vector = north_vec
     prj = yt.ProjectionPlot(
-        dataset, L, ('gas', 'aia_filter_band'), width=(1, sample_point.units), north_vector=north_vector
+        dataset, L, ('gas', 'aia_filter_band'), width=(1, sample_point.units), north_vector=north_vector,
     )
+    prj.set_cmap(field=("gas", "aia_filter_band"), cmap=color_tables.aia_color_table(int(131) * u.angstrom))
     prj.set_zlim(('gas', 'aia_filter_band'), zmin=(1e0, "1/s"), zmax=(3e2, "1/s"))
     for ypt in y_points['coordinates']:
         prj.annotate_marker(ypt.value, coord_system="data")
     prj.save()
+
+
 #  main()
 
