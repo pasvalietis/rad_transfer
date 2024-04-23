@@ -127,14 +127,14 @@ class SyntheticFilterImage():
 
         prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
             region,
-            [0.0, 0.5, 0.0],  # center position in code units
+            self.data.domain_center.value,  # center position in code units
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
             width=self.data.domain_width[0].value,  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
             item=self.__imag_field,  # respective field that is being projected
             north_vector=self.view_settings['north_vector'])
 
-        self.image = np.rot90(np.array(prji), k=3)
+        self.image = np.array(prji)  # np.rot90(np.array(prji), k=3)
 
         self.image_zoom = kwargs.get('image_zoom', None)
 
