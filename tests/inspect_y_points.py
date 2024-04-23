@@ -206,7 +206,7 @@ def skeletonize_slice(slice_2d):
     norm_slice = np.float32(slice_2d / np.max(slice_2d))
     edges_filtered = filters.sobel(norm_slice)
 
-    alpha = 4.45  #2.85  # 2.15  # 2.25  # Define alpha (contrast control)
+    alpha = 5.75  #2.85  # 2.15  # 2.25  # Define alpha (contrast control)
     beta = 0  # Define beta (brightness control)
     # Adjust the contrast
     high_contrast_image = cv.convertScaleAbs(norm_slice, alpha=alpha, beta=beta)
@@ -297,7 +297,7 @@ if __name__ == '__main__':
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
 
     # sample j_z dataset
-    downs_file_path = ds_dir + '/subs_3_flarecs-id_0050.h5'
+    downs_file_path = ds_dir + '/subs_3_flarecs-id_0060.h5'
     dataset = yt.load(downs_file_path, hint="YTGridDataset")
     cur_time = dataset.current_time.value.item()
 
@@ -431,7 +431,12 @@ if __name__ == '__main__':
             im = ax.imshow(jz_arr, origin='lower', vmin=8e-7, vmax=1e-5, cmap=im_cmap, extent=(-0.5, 0.5, 0, 1.0))
             im = ax.imshow(skeletonize_slice(jz_arr), origin='lower', cmap='Reds', extent=(-0.5, 0.5, 0, 1.0), alpha = 0.25)
             branches = identify_y_from_branch(skeletonize_slice(jz_arr), gauss_fit_params)
-            ax.scatter(branches[0] / 512 - 0.5 * np.ones_like(branches[0]), branches[1] / 512, color='k', marker='*')
+
+            if len(branches) != 0:
+                ax.scatter(branches[0] / 512 - 0.5 * np.ones_like(branches[0]), branches[1] / 512, color='k', marker='*')
+                yp_branch_x = branches[0] / 512 - 0.5 * np.ones_like(branches[0])
+                yp_branch_y = branches[1] / 512
+
             # , extent = (-0.5, 0.5, 0, 1.0)
             #points = np.squeeze(identify_edges(jz_arr)[1])
             #[np.where(np.squeeze(identify_edges(jz_arr)[1])[:, 1] > 204)]
@@ -561,7 +566,11 @@ if __name__ == '__main__':
         #plt.close()
 
         coords = cs_loc_profile
-        ypoint_coords['coordinates'].append((cs_max_x_coord, yp_ycoord_conv, coord)*cs_ray.fcoords.units)
+
+        if len(branches == 0):
+            yp_branch_x = cs_max_x_coord
+            yp_branch_y = yp_ycoord_conv
+        ypoint_coords['coordinates'].append((yp_branch_x, yp_branch_y, coord)*cs_ray.fcoords.units)
         print(i)
 
 #%%
