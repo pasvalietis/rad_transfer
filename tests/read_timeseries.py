@@ -48,7 +48,7 @@ def gen_map_from_timeseries(ds, start_time, timescale=109.8, instr='aia', channe
     reference_pixel = u.Quantity([833.5, -333.5], u.pixel)
     reference_coord = None
 
-    img_tilt = -23 * u.deg
+    img_tilt = 0. * u.deg
 
     synth_plot_settings = {'resolution': samp_resolution}
     synth_view_settings = {'normal_vector': [0.12, 0.05, 0.916],
