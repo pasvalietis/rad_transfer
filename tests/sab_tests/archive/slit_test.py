@@ -23,7 +23,7 @@ bl = SkyCoord(850*u.arcsec, -330*u.arcsec, frame=img.coordinate_frame)
 res = 250*u.arcsec
 img = img.submap(bottom_left=bl, width=res, height=res)
 
-downs_file_path = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
+downs_file_path = '/datacubes/subs_3_flarecs-id_0012.h5'
 subs_ds = yt.load(downs_file_path)  # , hint='AthenaDataset', units_override=units_override)
 cut_box = subs_ds.region(center=[0.0, 0.5, 0.0], left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 

@@ -13,7 +13,7 @@ import pickle
 from astropy.coordinates import SkyCoord, spherical_to_cartesian as stc
 
 # Method to create synthetic map of MHD data from rad_transfer
-def synthmap_plot(map_path, params_path, fig=None, plot=None, **kwargs):
+def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **kwargs):
     """
 
     @param img: Real image to project synthetic map onto
@@ -27,9 +27,12 @@ def synthmap_plot(map_path, params_path, fig=None, plot=None, **kwargs):
     """
 
     # Retrieve sunpy map object
-    with open(map_path, 'rb') as f:
-        img = pickle.load(f)
-        f.close()
+    if map:
+        img = map
+    else:
+        with open(map_path, 'rb') as f:
+            img = pickle.load(f)
+            f.close()
 
     # Calculate normal and north vectors for synthetic image alignment
     # Also retrieve lat, lon coords from loop params
@@ -39,6 +42,7 @@ def synthmap_plot(map_path, params_path, fig=None, plot=None, **kwargs):
     hheight = 75 * u.Mm  # Half the height of the simulation box
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
                   observer='earth', obstime=img.reference_coordinate.obstime).transform_to(frame='helioprojective')
+
 
     # Default initialization of normvector and northvector
     if normvector is None:
@@ -115,6 +119,9 @@ def synthmap_plot(map_path, params_path, fig=None, plot=None, **kwargs):
             # ax.plot_coord(coord_img, 'o', color='b')
             # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
             # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
+        elif plot == 'obs':
+            ax = fig.add_subplot(projection=img)
+            img.plot(axes=ax)
         else:
             ax = fig.add_subplot(projection=synth_map)
 

@@ -6,17 +6,36 @@ import astropy.units as u
 from utils.lso_align import synthmap_plot, calc_vect
 import pickle
 
-def slit_intensity(map_path, params_path, norm_slit, perp_slit, fig=None):
+def slit_intensity(params_path, norm_slit, perp_slit, map_path=None, map=None, fig=None):
+    """
+    Method to produce an intensity-along-slit plot for an observation compared with a synthetic X-ray projection
+
+    @param map_path: String path of cropped and pickled sunpy map
+    @param params_path: String path of pickled CLB loop parameters
+    @param norm_slit: 2D list containing arcsecond coordinates of the slit normal to the surface of the sun
+                      (eg. [[x1,x2],[y1,y2]])
+    @param perp_slit: 2D list containing arcsecond coordinates of the slit perpendicular to the norm_slit and
+                      intersecting the y-region (eg. [[x1,x2],[y1,y2]])
+    @param fig: OPTIONAL matplotlib fig object reference
+    @return: N/A
+    """
+
     # Retrieve sunpy map object
-    with open(map_path, 'rb') as f:
-        img = pickle.load(f)
-        f.close()
+    if map:
+        img = map
+    else:
+        with open(map_path, 'rb') as f:
+            img = pickle.load(f)
+            f.close()
 
     # Calculate normal and north vectors for synthetic image alignment
     # Also retrieve lat, lon coords from loop params
     norm, north, lat, lon = calc_vect(pkl=params_path)
 
-    synth_map = synthmap_plot(map_path, params_path, instr='aia', channel=171)
+    if map_path:
+        synth_map = synthmap_plot(params_path, map_path=map_path, instr='aia', channel=171)
+    if map:
+        synth_map = synthmap_plot(params_path, map=map, instr='aia', channel=171)
 
     if not fig:
         import matplotlib.pyplot as plt

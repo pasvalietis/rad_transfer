@@ -229,7 +229,7 @@ with open(map_path, 'rb') as f:
 
 # Path to clb loop parameters
 # params_path = clb_path + 'loop_params/2013/front_2013.pkl'
-params_path = './loop_params/2013/front_2013_testing.pkl'
+params_path = '../loop_params/2013/front_2013_testing.pkl'
 
 # Calculate normal and north vectors for synthetic image alignment
 norm, north = calc_vect(pkl=params_path)

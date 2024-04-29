@@ -29,7 +29,7 @@ def synthmap_plot(img, fig, normvector=None, northvector=None, comp=False, fm_co
         northvector = [0, 0, 1]
 
     # Load and crop subsampled 3D MHD file
-    downs_file_path = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
+    downs_file_path = '/datacubes/subs_3_flarecs-id_0012.h5'
     subs_ds = yt.load(downs_file_path)
     cut_box = subs_ds.region(center=[0.0, 0.5, 0.0], left_edge=[-0.5, 0.016, -0.25], right_edge=[0.5, 1.0, 0.25])
 
