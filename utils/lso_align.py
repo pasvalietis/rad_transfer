@@ -12,8 +12,9 @@ import astropy.constants as const
 import pickle
 from astropy.coordinates import SkyCoord, spherical_to_cartesian as stc
 
+
 # Method to create synthetic map of MHD data from rad_transfer
-def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **kwargs):
+def synthmap_plot(params_path, map_path=None, smap=None, fig=None, plot=None, **kwargs):
     """
 
     @param img: Real image to project synthetic map onto
@@ -27,28 +28,12 @@ def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **k
     """
 
     # Retrieve sunpy map object
-    if map:
-        img = map
+    if smap:
+        img = smap
     else:
         with open(map_path, 'rb') as f:
             img = pickle.load(f)
             f.close()
-
-    # Calculate normal and north vectors for synthetic image alignment
-    # Also retrieve lat, lon coords from loop params
-    normvector, northvector, lat, lon = calc_vect(pkl=params_path)
-
-    # define the heliographic sky coordinate of the midpoint of the loop
-    hheight = 75 * u.Mm  # Half the height of the simulation box
-    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
-                  observer='earth', obstime=img.reference_coordinate.obstime).transform_to(frame='helioprojective')
-
-
-    # Default initialization of normvector and northvector
-    if normvector is None:
-        normvector = [1, 0, 0]
-    if northvector is None:
-        northvector = [0, 0, 1]
 
     # Load subsampled 3D MHD file
     shen_datacube = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
@@ -80,6 +65,10 @@ def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **k
                            'cmap': 'inferno',
                            'logscale': True}
 
+    # Calculate normal and north vectors for synthetic image alignment
+    # Also retrieve lat, lon coords from loop params
+    normvector, northvector, lat, lon = calc_vect(pkl=params_path)
+
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
@@ -88,6 +77,11 @@ def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **k
                                 image_shift=[0, 0],  # move the bottom center of the flare in [x,y]
                                 bkg_fill=np.min(img.data))
 
+    # define the heliographic sky coordinate of the midpoint of the loop
+    hheight = 75 * u.Mm  # Half the height of the simulation box
+    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
+                  observer='earth', obstime=img.reference_coordinate.obstime).transform_to(frame='helioprojective')
+
     # Import scale from an AIA image:
     synth_map = aia_synthetic.make_synthetic_map(
                                                  obstime=img.reference_coordinate.obstime,
@@ -95,8 +89,6 @@ def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **k
                                                  detector='Synthetic AIA',
                                                  scale=obs_scale,
                                                  reference_coord=fm,
-                                                 # reference_coord=reference_coord,
-                                                 # reference_pixel=reference_pixel
                                                  )
 
     if fig:
@@ -109,13 +101,13 @@ def synthmap_plot(params_path, map_path=None, map=None, fig=None, plot=None, **k
             ax = fig.add_subplot(projection=synth_map)
             synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
 
-            coord=synth_map.reference_coordinate
-            pixels = synth_map.wcs.world_to_pixel(coord)
+            # coord=synth_map.reference_coordinate
+            # pixels = synth_map.wcs.world_to_pixel(coord)
             # coord_img=img.reference_coordinate
             # pixels_img=img.wcs.world_to_pixel(coord_img)
-            center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
-            ax.plot_coord(coord, 'o', color='r')
-            ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
+            # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
+            # ax.plot_coord(coord, 'o', color='r')
+            # ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
             # ax.plot_coord(coord_img, 'o', color='b')
             # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
             # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
@@ -144,7 +136,7 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     if 'pkl' in kwargs:
         with open(kwargs.get('pkl'), 'rb') as f:
             dims = pickle.load(f)
-            print(f'Loop dimensions loaded:{dims}')
+            # print(f'Loop dimensions loaded:{dims}')
             radius = dims['radius']
             height = dims['height']
             phi0 = dims['phi0']
