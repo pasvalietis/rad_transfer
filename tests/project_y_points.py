@@ -69,15 +69,16 @@ if __name__ == '__main__':
     start_time = Time('2011-03-07T12:30:00', scale='utc', format='isot')
     # fns is a list of all the simulation data files in the current directory.
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
-    ts = read_dataset(ds_dir)
+    #ts = read_dataset(ds_dir)
 
     # sample j_z dataset
-    #downs_file_path = ds_dir + '/subs_3_flarecs-id_0050.h5'
-    #dataset = yt.load(downs_file_path, hint="YTGridDataset")
+    tstep = '0070'
+    downs_file_path = ds_dir + '/subs_3_flarecs-id_'+tstep+'.h5'
+    dataset = yt.load(downs_file_path, hint="YTGridDataset")
 #%%
     
     # Read y-point dictionary from a pickle file:
-    pickle_file_name = './cur_dens_slices/y_points_0050.pickle'
+    pickle_file_name = './cur_dens_slices/y_points_'+tstep+'.pickle'
     with open(pickle_file_name, 'rb') as yfile:
         y_points = pickle.load(yfile)
 
