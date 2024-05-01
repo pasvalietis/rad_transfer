@@ -284,9 +284,12 @@ def identify_y_from_branch(skeleton, gauss_fit_params):
 
     # Find the branch point at the bottom of the RCS -- 'actual y point'
     ypts = np.array(candidate_ypoints)
-    indices = np.argsort(-ypts[:, 1])
-    sorted_ypts = ypts[indices]
-    ypoint = sorted_ypts[-1]
+    if len(ypts) != 0:
+        indices = np.argsort(-ypts[:, 1])
+        sorted_ypts = ypts[indices]
+        ypoint = sorted_ypts[-1]
+    else:
+        return np.array([])
     # coordinate = None
     return np.array(ypoint)
 #%%
@@ -297,7 +300,7 @@ if __name__ == '__main__':
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
 
     # sample j_z dataset
-    downs_file_path = ds_dir + '/subs_3_flarecs-id_0060.h5'
+    downs_file_path = ds_dir + '/subs_3_flarecs-id_0065.h5'
     dataset = yt.load(downs_file_path, hint="YTGridDataset")
     cur_time = dataset.current_time.value.item()
 
