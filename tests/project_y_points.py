@@ -23,6 +23,7 @@ from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.visualization.colormaps import color_tables
 from read_timeseries import gen_map_from_timeseries
 from read_timeseries import read_dataset
+from current_density import _divergence, _convergence
 '''
 Generate synthetic AIA image for respective timeframe
 '''
@@ -106,6 +107,25 @@ if __name__ == '__main__':
     vmin, vmax = 1e0, 3e2
     ax.imshow(np.transpose(synth_map.data), origin='lower', extent=(-0.5, 0.5, 0, 1.0), norm=colors.LogNorm(vmin=vmin, vmax=vmax))
     ax.scatter(rcs_bottom[:, 1], rcs_bottom[:, 0], color='r', marker='+')
+
+#%%
+    # Calculate flow convergence and display converging flows
+    dataset.add_field(
+        name=("gas", "convergence"),
+        function=_convergence,
+        sampling_type="local",
+        units="dimensionless",
+        force_override=True,
+    )
+
+    dataset.add_field(
+        name=("gas", "divergence"),
+        function=_divergence,
+        sampling_type="local",
+        units="dimensionless",
+        force_override=True,
+    )
+
 #%%
    # Use yt plotting window with annotate_marker
     L = norm_vec  # vector normal to cutting plane
@@ -113,12 +133,29 @@ if __name__ == '__main__':
     prj = yt.ProjectionPlot(
         dataset, L, ('gas', 'aia_filter_band'), width=(1, sample_point.units), north_vector=north_vector,
     )
+
+    #prj = yt.ProjectionPlot(
+    #    dataset, L, ('gas', 'convergence'), width=(1, sample_point.units), north_vector=north_vector,
+    #)
+
+    prj.annotate_contour(("gas", "convergence"), levels=5, factor=4, take_log=True, label=False, clim=(10**7.2, 1e8),
+                         plot_args={'cmap':'PuBu_r', 'color':'r'})
+
+    prj.annotate_contour(("gas", "divergence"), levels=8, factor=2, take_log=True, label=False, clim=(10 ** 7.2, 1e8),
+                         plot_args={'cmap': 'Reds_r', 'color': 'r'})
+    # prj.annotate_magnetic_field(headlength=3)
+    # prj.annotate_cquiver(
+    #     ("gas", "cutting_plane_velocity_x"),
+    #     ("gas", "cutting_plane_velocity_y"),
+    #     factor=10,
+    #     color="orange",
+    # )
+
     prj.set_cmap(field=("gas", "aia_filter_band"), cmap=color_tables.aia_color_table(int(131) * u.angstrom))
     prj.set_zlim(('gas', 'aia_filter_band'), zmin=(1e0, "1/s"), zmax=(3e2, "1/s"))
     for ypt in y_points['coordinates']:
-        prj.annotate_marker(ypt.value, coord_system="data")
+        prj.annotate_marker(ypt.value, coord_system="data", color="magenta")
     prj.save()
-
 
 #  main()
 
