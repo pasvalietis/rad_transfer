@@ -23,7 +23,7 @@ from rad_transfer.utils.proj_imag import SyntheticFilterImage as synt_img
 from rad_transfer.visualization.colormaps import color_tables
 from read_timeseries import gen_map_from_timeseries
 from read_timeseries import read_dataset
-from current_density import _divergence, _convergence
+from current_density import _current_density, _divergence, _convergence
 '''
 Generate synthetic AIA image for respective timeframe
 '''
@@ -65,8 +65,38 @@ def proj_points_2d_coords_in_imag(point, norm_vector, north_vector):
     return x, y
 
 #%%
+def rcs_2d_diagnostics(dataset, rcs_xcoord, y_points):
+    """
+    This function takes a model dataset and returnd overplotted velocity divergence & convergence + streamlines
+    :param dataset: yt_dataset
+    :param rcs_xcoord: x coordinate of the reconnection current sheet
+    :param ypoints: dictionary containing ypoints coordinates
+    :return p: slice plot with overplotted fields/contours
+    """
+    slc = yt.SlicePlot(dataset, "x", ("gas", "current_density"),
+                     center=[rcs_xcoord.value, dataset.domain_center[1].value, dataset.domain_center[2].value],
+                     width=(150, "Mm"))
+    slc.set_cmap(("gas", "current_density"), "RdBu_r")
+
+    width = (150, "Mm")  # we want a 1.5 mpc view
+    res = [512, 512]  # create an image with 1000x1000 pixels
+    frb = slc.to_frb(width, res, center=[rcs_xcoord.value, dataset.domain_center[1].value, dataset.domain_center[2].value])
+    #slc.set_log(("gas", "current_density"), True)
+    #slc.set_zlim(('gas', 'current_density'), zmin=(1e0, "1/s"), zmax=(3e2, "1/s"))
+    # s.annotate_marker((0.2, 0.5, 0.9), coord_system="data")
+    for ypt in y_points['coordinates']:
+       slc.annotate_marker(ypt[1:3], coord_system="data", color="magenta")
+
+    slc.swap_axes()
+    slc.save()
+
+    return slc
+
+#%%
 if __name__ == '__main__':
     # %%
+    plt.ioff()
+
     start_time = Time('2011-03-07T12:30:00', scale='utc', format='isot')
     # fns is a list of all the simulation data files in the current directory.
     ds_dir = '/media/ivan/TOSHIBA EXT/subs'
@@ -110,6 +140,22 @@ if __name__ == '__main__':
 
 #%%
     # Calculate flow convergence and display converging flows
+    # calculating current density derived field
+    rad_buffer_obj = dataset
+    grad_fields_x = rad_buffer_obj.add_gradient_fields(("gas", "magnetic_field_x"))
+    grad_fields_y = rad_buffer_obj.add_gradient_fields(("gas", "magnetic_field_y"))
+    grad_fields_z = rad_buffer_obj.add_gradient_fields(("gas", "magnetic_field_z"))
+
+    dataset.add_field(
+        ("gas", "current_density"),
+        function=_current_density,
+        sampling_type="cell",
+        units="G/cm**2",
+        take_log=False,
+        force_override=True
+        # validators=[ValidateParameter(["center", "bulk_velocity"])],
+    )
+
     dataset.add_field(
         name=("gas", "convergence"),
         function=_convergence,
@@ -134,15 +180,88 @@ if __name__ == '__main__':
         dataset, L, ('gas', 'aia_filter_band'), width=(1, sample_point.units), north_vector=north_vector,
     )
 
+#%%
+    # find average x_coord of all Y points and identify it as an RCS x coordinate
+    x_coords = unyt_array(np.zeros(len(y_points['coordinates'])), y_points['coordinates'][0].units.units)
+    i = 0
+    for ypt in y_points['coordinates']:
+        x_coords[i] = ypt[0]
+        i += 1
+    rcs_xcoord = np.mean(x_coords)
+
+#%%
+
+    # slc = yt.SlicePlot(dataset, "x", ("gas", "current_density"),
+    #                    center=[rcs_xcoord.value, dataset.domain_center[1].value, dataset.domain_center[2].value],
+    #                    width=(150, "Mm"))
+    # slc.set_cmap(("gas", "current_density"), "RdBu_r")
+
+    slc = dataset.slice(axis="x", coord=rcs_xcoord.value)
+
+
+    width = (150, "Mm")  # we want a 1.5 mpc view
+    res = [512, 512]  # create an image with 1000x1000 pixels
+    frb = slc.to_frb(width, res,
+                     center=[rcs_xcoord.value, dataset.domain_center[1].value, dataset.domain_center[2].value])
+
+    # for ypt in y_points['coordinates']:
+    #     slc.annotate_marker(ypt[1:3], coord_system="data", color="magenta")
+    #
+    # slc.swap_axes()
+    # slc.save()
+    #frb['gas', 'current_density'].swapaxes
+    import matplotlib.colors as colors
+
+    fig, ax = plt.subplots(1, 1, figsize=(8.0, 7.0))
+
+    div_map = np.rot90(np.nan_to_num(frb['gas', 'divergence'].d))
+    conv_map = np.rot90(np.nan_to_num(frb['gas', 'convergence'].d))
+
+    pcm = ax.imshow(np.rot90(np.nan_to_num(frb['gas', 'current_density'].d)),
+                    origin='upper',
+                    cmap='Purples',
+                    norm=colors.LogNorm(vmin=1e-6, vmax=4e-5),
+                    extent=(-0.5, 0.5, 0, 1.0))
+
+    cbar = fig.colorbar(pcm, ax=ax, extend='max')
+
+    ax.contour(div_map,
+                      levels=[0.05 * np.max(div_map), 0.1 * np.max(conv_map), 0.5 * np.max(conv_map)],
+                      origin='upper',
+                      colors=['red'],
+               extent=(-0.5, 0.5, 0, 1.0))
+
+    ax.contour(conv_map,
+                      levels=[0.05 * np.max(conv_map), 0.1 * np.max(conv_map), 0.5 * np.max(conv_map)],
+                      origin='upper',
+                      colors=['blue'],
+               extent=(-0.5, 0.5, 0, 1.0))
+
+
+    #yline = np
+    for ypt in y_points['coordinates']:
+       ax.scatter(ypt[2], ypt[1], color="cyan", marker='+')
+
+    ax.set_xlabel('$z$, code length')
+    ax.set_ylabel('$y$, code length')
+    ax.set_title('timestep = '+str(tstep)+', $x_{rcs}$ = '+str("{0:.6g}".format(rcs_xcoord.value)))
+
+    fig.savefig('jz_yline_'+tstep+'.png')
+    # slc.set_log(("gas", "current_density"), True)
+    # slc.set_zlim(('gas', 'current_density'), zmin=(1e0, "1/s"), zmax=(3e2, "1/s"))
+    # s.annotate_marker((0.2, 0.5, 0.9), coord_system="data")
+
+#%%
+
     #prj = yt.ProjectionPlot(
     #    dataset, L, ('gas', 'convergence'), width=(1, sample_point.units), north_vector=north_vector,
     #)
 
-    prj.annotate_contour(("gas", "convergence"), levels=5, factor=4, take_log=True, label=False, clim=(10**7.2, 1e8),
-                         plot_args={'cmap':'PuBu_r', 'color':'r'})
+    #prj.annotate_contour(("gas", "convergence"), levels=5, factor=4, take_log=True, label=False, clim=(10**7.2, 1e8),
+    #                     plot_args={'cmap':'PuBu_r', 'color':'r'})
 
-    prj.annotate_contour(("gas", "divergence"), levels=8, factor=2, take_log=True, label=False, clim=(10 ** 7.2, 1e8),
-                         plot_args={'cmap': 'Reds_r', 'color': 'r'})
+    #prj.annotate_contour(("gas", "divergence"), levels=8, factor=2, take_log=True, label=False, clim=(10 ** 7.2, 1e8),
+    #                     plot_args={'cmap': 'Reds_r', 'color': 'r'})
     # prj.annotate_magnetic_field(headlength=3)
     # prj.annotate_cquiver(
     #     ("gas", "cutting_plane_velocity_x"),
@@ -154,7 +273,7 @@ if __name__ == '__main__':
     prj.set_cmap(field=("gas", "aia_filter_band"), cmap=color_tables.aia_color_table(int(131) * u.angstrom))
     prj.set_zlim(('gas', 'aia_filter_band'), zmin=(1e0, "1/s"), zmax=(3e2, "1/s"))
     for ypt in y_points['coordinates']:
-        prj.annotate_marker(ypt.value, coord_system="data", color="magenta")
+       prj.annotate_marker(ypt.value, coord_system="data", color="magenta")
     prj.save()
 
 #  main()
