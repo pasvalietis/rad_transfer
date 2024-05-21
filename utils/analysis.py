@@ -7,12 +7,12 @@ from utils.lso_align import synthmap_plot, calc_vect
 import pickle
 
 
-def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xsmap=None, map_path=None, smap=None, fig=None,
+def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xmap=None, smap_path=None, smap=None, fig=None,
                    **kwargs):
     """
     Method to produce an intensity-along-slit plot for an observation compared with a synthetic X-ray projection
 
-    @param map_path: String path of cropped and pickled sunpy map
+    @param smap_path: String path of cropped and pickled sunpy map
     @param params_path: String path of pickled CLB loop parameters
     @param norm_slit: 2D list containing arcsecond coordinates of the slit normal to the surface of the sun
                       (eg. [[x1,x2],[y1,y2]])
@@ -22,26 +22,35 @@ def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xsmap=None
     @return: N/A
     """
 
+    # Generate synthetic map from provided observation map (smap) and coronal loop parameters (params_path)
     try:
-        # Retrieve aia smap object
+        instr = kwargs.get('instr', 'xrt')
+        channel = kwargs.get('channel', 'Ti-poly')
         if smap:
-            synth_map = synthmap_plot(params_path, smap=smap)
-        elif map_path:
-            synth_map = synthmap_plot(params_path, map_path=map_path)
+            synth_map = synthmap_plot(params_path, smap=smap, instr=instr, channel=channel)
+        elif smap_path:
+            synth_map = synthmap_plot(params_path, map_path=smap_path, instr=instr, channel=channel)
     except:
-        print('Please provide either an aia map (smap) or path to pickled aia map (map_path)')
+        print("\n\nHandled Exception:\n")
+        raise Exception('Please provide either a map (smap) or path to map (smap_path)')
 
+    # Retrieve xrt comparison image (ximg)
     try:
-        # Retrieve aia smap object
-        if xsmap:
-            ximg = xsmap
+        if xmap:
+            ximg = xmap
         else:
-            with open(xmap_path, 'rb') as f:
-                ximg = pickle.load(f)
-                f.close()
+            try:
+                with open(xmap_path, 'rb') as f:
+                    ximg = pickle.load(f)
+                    f.close()
+            except:
+                ximg = sunpy.map.Map(xmap_path)
     except:
-        print('Please provide either an xrt map (smap) or path to pickled xrt map (map_path)')
+        print("\n\nHandled Exception:\n")
+        raise Exception('Please provide either a map (xmap) or path to map (xmap_path)')
 
+    # Checks if matplotlib object has been targeted for plotting
+    # If not, creates a new instance and plots there
     if not fig:
         import matplotlib.pyplot as plt
         fig = plt.figure(constrained_layout=True, figsize=(10, 6))
@@ -98,7 +107,7 @@ def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xsmap=None
     ax2.grid(False)
     synth_map.draw_limb()
 
-    # Retrieve normal and north vectors for synthetic image alignment
+    # Retrieve normal and north vectors used for synthetic image alignment
     norm, north, _, _ = calc_vect(pkl=params_path)
 
     ax2.text(200, 30,
@@ -112,7 +121,7 @@ def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xsmap=None
     plt.colorbar()
 
     ax3 = fig.add_subplot(gs[2, :])
-    ax3.plot(angular_separation, intensity, linewidth=0.65, label='AIA', color='magenta')
+    ax3.plot(angular_separation, intensity, linewidth=0.65, label='XRT', color='magenta')
     ax3.plot(angular_separation_, intensity_, linewidth=0.65, label='Synthetic', color='magenta', linestyle='--')
 
     ax3.plot(angular_separation2, intensity2, linewidth=0.65, color='red')

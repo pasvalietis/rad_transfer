@@ -14,7 +14,7 @@ from astropy.coordinates import SkyCoord, spherical_to_cartesian as stc
 
 
 # Method to create synthetic map of MHD data from rad_transfer
-def synthmap_plot(params_path, map_path=None, smap=None, fig=None, plot=None, **kwargs):
+def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, **kwargs):
     """
 
     @param img: Real image to project synthetic map onto
@@ -27,13 +27,20 @@ def synthmap_plot(params_path, map_path=None, smap=None, fig=None, plot=None, **
     @return:
     """
 
-    # Retrieve sunpy map object
-    if smap:
-        img = smap
-    else:
-        with open(map_path, 'rb') as f:
-            img = pickle.load(f)
-            f.close()
+    # Retrieve reference image (ref_img)
+    try:
+        if smap:
+            ref_img = smap
+        else:
+            try:
+                with open(smap_path, 'rb') as f:
+                    ref_img = pickle.load(f)
+                    f.close()
+            except:
+                ref_img = sunpy.map.Map(smap_path)
+    except:
+        print("\n\nHandled Exception:\n")
+        raise Exception('Please provide either a map (xmap) or path to pickled map (xmap_path)')
 
     # Load subsampled 3D MHD file
     shen_datacube = '/home/saber/rad_transfer/datacubes/subs_3_flarecs-id_0012.h5'
@@ -48,15 +55,14 @@ def synthmap_plot(params_path, map_path=None, smap=None, fig=None, plot=None, **
                              right_edge=kwargs.get('right_edge', right_edge))
 
     # Instrument settings for synthetic image
-    instr = kwargs.get('instr', 'aia')  # keywords: 'aia' or 'xrt'
-    channel = kwargs.get('channel', 131)
-
+    instr = kwargs.get('instr', 'xrt')  # keywords: 'aia' or 'xrt'
+    channel = kwargs.get('channel', 'Ti-poly')
     # Prepare cropped MHD data for imaging
-    aia_synthetic = synt_img(cut_box, instr, channel)
+    xrt_synthetic = synt_img(cut_box, instr, channel)
 
     # Match parameters of the synthetic image to observed one
-    samp_resolution = img.data.shape[0]
-    obs_scale = [img.scale.axis1, img.scale.axis2] * (u.arcsec / u.pixel)
+    samp_resolution = ref_img.data.shape[0]
+    obs_scale = [ref_img.scale.axis1, ref_img.scale.axis2] * (u.arcsec / u.pixel)
 
     # Dynamic synth plot settings
     synth_plot_settings = {'resolution': samp_resolution,
@@ -72,28 +78,28 @@ def synthmap_plot(params_path, map_path=None, smap=None, fig=None, plot=None, **
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
-    aia_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
+    xrt_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
                                 image_shift=[0, 0],  # move the bottom center of the flare in [x,y]
-                                bkg_fill=np.min(img.data))
+                                bkg_fill=np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
-                  observer='earth', obstime=img.reference_coordinate.obstime).transform_to(frame='helioprojective')
+                  observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
 
     # Import scale from an AIA image:
-    synth_map = aia_synthetic.make_synthetic_map(
-                                                 obstime=img.reference_coordinate.obstime,
+    synth_map = xrt_synthetic.make_synthetic_map(
+                                                 obstime=ref_img.reference_coordinate.obstime,
                                                  observer='earth',
-                                                 detector='Synthetic AIA',
+                                                 detector='Synthetic XRT',
                                                  scale=obs_scale,
                                                  reference_coord=fm,
                                                  )
 
     if fig:
         if plot == 'comp':
-            comp = sunpy.map.Map(synth_map, img, composite=True)
+            comp = sunpy.map.Map(synth_map, ref_img, composite=True)
             comp.set_alpha(0, 0.50)
             ax = fig.add_subplot(projection=comp.get_map(0))
             comp.plot(axes=ax)
@@ -101,19 +107,21 @@ def synthmap_plot(params_path, map_path=None, smap=None, fig=None, plot=None, **
             ax = fig.add_subplot(projection=synth_map)
             synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
 
+            # Plotting key map points [debug purposes]
             # coord=synth_map.reference_coordinate
             # pixels = synth_map.wcs.world_to_pixel(coord)
-            # coord_img=img.reference_coordinate
-            # pixels_img=img.wcs.world_to_pixel(coord_img)
+            # coord_img=ref_img.reference_coordinate
+            # pixels_img=ref_img.wcs.world_to_pixel(coord_img)
             # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
             # ax.plot_coord(coord, 'o', color='r')
             # ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
             # ax.plot_coord(coord_img, 'o', color='b')
             # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
             # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
+
         elif plot == 'obs':
-            ax = fig.add_subplot(projection=img)
-            img.plot(axes=ax)
+            ax = fig.add_subplot(projection=ref_img)
+            ref_img.plot(axes=ax)
         else:
             ax = fig.add_subplot(projection=synth_map)
 

@@ -54,15 +54,20 @@ elif fsel == 1:
 
     # 2012 Slit
     if yrsel==0:
-        norm_slit = [[975, 1050], [-240, -260]]   # x1, x2, y1, y2
-        perp_slit = [[1025, 1010], [-225, -275]]
+        # norm_slit = [[975, 1050], [-240, -260]]   # x1, x2, y1, y2
+        # perp_slit = [[1025, 1010], [-225, -275]]
+        norm_slit = [[980, 1055], [-235, -255]]   # x1, x2, y1, y2
+        perp_slit = [[1030, 1015], [-220, -270]]
     # 2013 Slits
     elif yrsel == 1:
         norm_slit = [[-925, -975], [215, 225]]
         perp_slit = [[-935, -945], [250, 195]]
 
     xrt_map = Map(IMG_PATH)
-    slit_intensity(PARAMS_PATH, norm_slit, perp_slit, xsmap=xrt_map ,smap=img, clb=True)
+    # slit_intensity(PARAMS_PATH, norm_slit, perp_slit, xmap=xrt_map, smap=img,
+    #                instr='aia', channel=131, clb=True)
+    slit_intensity(PARAMS_PATH, norm_slit, perp_slit, xmap=xrt_map, smap=xrt_map,
+                   instr='xrt', channel='Al-mesh', clb=True)
 
 # Compare Contrast Synth/AIA
 elif fsel == 2:

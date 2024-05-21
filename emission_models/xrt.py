@@ -29,7 +29,8 @@ class XRTModel:
         self.domain_dimensions = ds.domain_dimensions
 
     def process_data(self, chunk):
-        trm_path = '../instr/hinode_xrt/xrt_temp_response.npy'
+        # trm_path = '../instr/hinode_xrt/xrt_temp_response.npy'
+        trm_path = '/home/saber/rad_transfer/instr/hinode_xrt/xrt_temp_response.npy'
         xrt_trm = np.load(trm_path, allow_pickle=True)
 
         channel = self.channel
