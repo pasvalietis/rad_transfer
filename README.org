@@ -1,0 +1,8 @@
+#+TITLE: Rushlight: an emission modeling package to generate synthetic observational data from numerical models
+
+* Aim
+Compute synthetic emissivities from physical parameters that are stored in 3D MHD/particle datasets to futher create synthetic images that can be compared with observations.
+Currently availiable instruments are SDO/AIA and Hinode/XRT. 
+
+These codes utilizes functionality provided by [[https://yt-project.org/][yt]] and [[https://sunpy.org/][sunpy]] packages.
+
