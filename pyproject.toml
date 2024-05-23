@@ -1,21 +1,7 @@
-[project]
-name = "rushlight"
-description = "Rushlight is an emission modeling package to generate synthetic observational data from numerical models"
-readme = "README.org"
-license = { text = "BSD 3-Clause License" }
-dependencies = [
-    "numpy",
-    "astropy>=3.2",
-]
-dynamic = ["version"]
-
 [build-system]
-# Minimum requirements for the build system to execute.
-# PEP 508 specifications.
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = 'setuptools.build_meta'  
 
-[tool.setuptools]
-zip_safe = false
+requires = ["setuptools",
+            "setuptools_scm",
+            "wheel"]
 
-[tool.setuptools.packages.find]
+build-backend = 'setuptools.build_meta'
