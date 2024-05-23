@@ -5,7 +5,3 @@ Compute synthetic emissivities from physical parameters that are stored in 3D MH
 Currently availiable instruments are SDO/AIA and Hinode/XRT. 
 
 These codes utilizes functionality provided by [[https://yt-project.org/][yt]] and [[https://sunpy.org/][sunpy]] packages.
-<<<<<<< HEAD
-=======
-
->>>>>>> pubv
