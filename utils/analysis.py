@@ -142,3 +142,7 @@ def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xmap=None,
 
     plt.show()
     plt.close()
+
+    if kwargs.get('lp_sv', False):
+        destination = kwargs.get('lp_dst', '2012/back_2012_testing.pkl')
+        coronal_loop1.save_params_to_pickle(destination)

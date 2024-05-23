@@ -11,6 +11,7 @@ import sunpy.map
 import astropy.constants as const
 import pickle
 from astropy.coordinates import SkyCoord, spherical_to_cartesian as stc
+import matplotlib.colors as colors
 
 
 # Method to create synthetic map of MHD data from rad_transfer
@@ -60,9 +61,16 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
     # Prepare cropped MHD data for imaging
     xrt_synthetic = synt_img(cut_box, instr, channel)
 
+    # Calculate normal and north vectors for synthetic image alignment
+    # Also retrieve lat, lon coords from loop params
+    normvector, northvector, lat, lon, radius, height, ifpd = calc_vect(pkl=params_path)
+
     # Match parameters of the synthetic image to observed one
     samp_resolution = ref_img.data.shape[0]
-    obs_scale = [ref_img.scale.axis1, ref_img.scale.axis2] * (u.arcsec / u.pixel)
+    s = 1   # unscaled
+    # s = 1.5 # 2012
+    # s = 3   # 2013
+    obs_scale = [ref_img.scale.axis1/s, ref_img.scale.axis2/s] * (u.arcsec / u.pixel)
 
     # Dynamic synth plot settings
     synth_plot_settings = {'resolution': samp_resolution,
@@ -70,10 +78,6 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
                            'vmax': 8e1,
                            'cmap': 'inferno',
                            'logscale': True}
-
-    # Calculate normal and north vectors for synthetic image alignment
-    # Also retrieve lat, lon coords from loop params
-    normvector, northvector, lat, lon = calc_vect(pkl=params_path)
 
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
@@ -85,7 +89,9 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
-    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + hheight, frame='heliographic_stonyhurst',
+    disp = hheight/s + height + radius
+
+    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp, frame='heliographic_stonyhurst',
                   observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
 
     # Import scale from an AIA image:
@@ -105,7 +111,12 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
             comp.plot(axes=ax)
         elif plot == 'synth':
             ax = fig.add_subplot(projection=synth_map)
-            synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
+            # synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
+            synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
+            synth_map.plot_settings['cmap'] = ref_img.plot_settings['cmap']
+            synth_map.plot(axes=ax)
+            ax.grid(False)
+            synth_map.draw_limb()
 
             # Plotting key map points [debug purposes]
             # coord=synth_map.reference_coordinate
@@ -199,6 +210,9 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     v1 = np.array([x[0].value, y[0].value, z[0].value]) * x[0].unit
     v2 = np.array([x[-1].value, y[-1].value, z[-1].value]) * x[0].unit
 
+    # Inter-FootPoint distance
+    ifpd = np.linalg.norm(v1-v2)
+
     # Use the cross product to determine the orientation
     cross_product = np.cross(v1, v2) if az.value < 90 else -np.cross(v1, v2)
 
@@ -224,4 +238,4 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 
     lat, lon = theta0, phi0
     # normal vector, north vector, latitude, longitude
-    return norm, north, lat, lon
+    return norm, north, lat, lon, radius, height, ifpd
