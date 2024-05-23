@@ -1,6 +1,8 @@
 
 .idea/vcs.xml
+conf.ini
 *.xml
 *.h5
 *.iml
 *.pyc
+*.jpg
