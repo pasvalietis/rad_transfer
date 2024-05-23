@@ -8,10 +8,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-sys.path.insert(0, '/home/ivan/Study/Astro/solar')
-
-from rad_transfer.emission_models import uv, xrt, xray_bremsstrahlung
-from rad_transfer.visualization.colormaps import color_tables
+from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
+from rushlight.visualization.colormaps import color_tables
 
 # Importing sunpy dependencies for a synthetic map
 # See creating custom maps: https://docs.sunpy.org/en/stable/how_to/create_custom_map.html

@@ -2,7 +2,7 @@ from sunpy.net import Fido
 from sunpy.net import attrs as a
 import astropy.units as u
 from astropy.time import Time, TimeDelta
-from config import config
+from rushlight.config import config
 
 '''
 This script provides functionality to download FITS data and apply calibrations to the images
