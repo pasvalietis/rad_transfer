@@ -10,6 +10,8 @@ from astropy import units as u
 from yt.fields.particle_fields import obtain_relative_velocity_vector
 from yt.fields.vector_operations import get_bulk
 
+from rushlight.config import config
+
 class UVModel:
     def __init__(self, temperature_field, density_field, channel):
         self.temperature_field = temperature_field
@@ -31,8 +33,7 @@ class UVModel:
         self.domain_dimensions = ds.domain_dimensions
 
     def process_data(self, chunk):
-        # trm_path = '../instr/sdo_aia/aia_temp_response.npy'
-        trm_path = '/home/saber/rad_transfer/instr/sdo_aia/aia_temp_response.npy'
+        trm_path = config.INSTRUMENTS['SDO_AIA_TEMP_RESPONSE']
         aia_trm = np.load(trm_path, allow_pickle=True)
 
         channels = {'94': 0, '131': 1, '171': 2, '193': 3, '211': 4, '335': 5}
