@@ -1,10 +1,9 @@
 import sys
-sys.path.insert(1, '/home/saber/CoronalLoopBuilder')
 # noinspection PyUnresolvedReferences
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d
 
 import yt
-from utils.proj_imag import SyntheticFilterImage as synt_img
+from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
 import astropy.units as u
 import numpy as np
 import sunpy.map
