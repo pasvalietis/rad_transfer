@@ -3,7 +3,7 @@ from astropy.coordinates import SkyCoord
 import sunpy.map
 import astropy.units as u
 
-from rushlight.utils.lso_align import synthmap_plot, calc_vect
+from utils.lso_align import synthmap_plot, calc_vect
 import pickle
 
 
