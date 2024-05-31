@@ -16,6 +16,18 @@ import matplotlib.colors as colors
 
 # Method to create synthetic map of MHD data from rad_transfer
 def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, **kwargs):
+    '''
+
+    @param params_path: string path to pickled Coronal Loop Builder loop parameters
+    @param smap_path: string path to the reference map
+    @param smap: sunpy reference map object
+    @param fig: matplotlib figure object
+    @param plot: string hint for kind of plot to produce
+    @param kwargs: 'datacube' - path to simulation file; 'center', 'left_edge', 'right_edge' - bounds of simulation box
+                   'instr' - simulated instrument (xrt or aia); 'channel' - simulated wavelength (in nm or eg. Ti-poly)
+    @return: ax - axes object pointing to plotted synthetic image
+    '''
+
     """
 
     @param img: Real image to project synthetic map onto
@@ -24,7 +36,7 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
     @param northvector: Vector indicating pointing direction for candleflame 'tip' of flare
     @param comp: 'True' for real + synthetic image, 'False' for just synthetic image
     @param fm_coord: Coordinate for the foot midpoint of the flare loop
-    @param kwargs: Optional keywords: 'datacube', 'center', 'left_edge', 'right_edge', 'instr', 'channel'
+    @param kwargs: 
     @return:
     """
 
@@ -180,7 +192,7 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     z0 = r0.to(u.cm)
 
     theta = el.to(u.rad).value  # np.pi / 2  # Elevation angle
-    phi = az.to(u.rad).value  # np.pi / 4  # Azimuth angle
+    phi = az.to(u.rad).value #+ np.pi / 2 # np.pi / 4  # Azimuth angle
     t = np.linspace(0, 2 * np.pi, int(samples_num))  # Parameter t
 
     dx, dy, dz = circle_3d(0, 0, 0, radius, theta, phi, t)

@@ -108,7 +108,7 @@ def slit_intensity(params_path, norm_slit, perp_slit, xmap_path=None, xmap=None,
     synth_map.draw_limb()
 
     # Retrieve normal and north vectors used for synthetic image alignment
-    norm, north, _, _ = calc_vect(pkl=params_path)
+    norm, north, _, _, _, _, _ = calc_vect(pkl=params_path)
 
     ax2.text(200, 30,
              'norm: ' + str(list(float(i) for i in ["%.2f" % elem for elem in norm])) +
