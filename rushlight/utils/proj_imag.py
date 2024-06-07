@@ -8,8 +8,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
-from rushlight.visualization.colormaps import color_tables
+from emission_models import uv, xrt, xray_bremsstrahlung
+from visualization.colormaps import color_tables
 
 # Importing sunpy dependencies for a synthetic map
 # See creating custom maps: https://docs.sunpy.org/en/stable/how_to/create_custom_map.html
@@ -63,7 +63,6 @@ class SyntheticFilterImage():
                               'north_vector': (-0.7, -0.3, 0.0)}
         self.__imag_field = None
         self.image = None
-        self.generic_data = kwargs.get('generic', None)
 
         if self.box:
             self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
@@ -125,27 +124,25 @@ class SyntheticFilterImage():
 
         prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
             region,
-            self.data.domain_center.value,  # center position in code units
+            [0.0, 0.5, 0.0],  # center position in code units
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
             width=self.data.domain_width[0].value,  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
             item=self.__imag_field,  # respective field that is being projected
             north_vector=self.view_settings['north_vector'])
 
-        self.image = np.array(prji)  # np.rot90(np.array(prji), k=3)
+        # self.image = np.rot90(np.array(prji), k=3)
+        self.image = np.array(prji)
 
         self.image_zoom = kwargs.get('image_zoom', None)
-
         if self.image_zoom:
             self.image = self.zoom_out(self.image, self.image_zoom)
 
         # return self.image
         self.image_shift = kwargs.get('image_shift', None)  # (xshift, yshift)
-
         if self.image_shift:
             self.image = np.roll(self.image, (self.image_shift[0],
                                               self.image_shift[1]), axis=(1, 0))
-        #if kwargs.get('shift_imag', 'EIT')
 
         # Fill background
         self.bkg_fill = kwargs.get('bkg_fill', None)
@@ -166,18 +163,13 @@ class SyntheticFilterImage():
         new_arr[starty:starty + cropy, startx:startx + cropx] = zoomed_img
         return new_arr
 
-    def make_synthetic_map(self, generic_data=None, **kwargs):
+    def make_synthetic_map(self, **kwargs):
 
         """
         Creates a synthetic map object that can be loaded/edited with sunpy
         :return:
         """
-
         data = self.image
-        if generic_data is not None:
-            print('proj_imag_: loading generic data container')
-            data = generic_data
-
         self.obstime = kwargs.get('obstime')
 
         # Define header parameters for the synthetic image
