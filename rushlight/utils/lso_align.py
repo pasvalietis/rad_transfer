@@ -3,7 +3,8 @@ sys.path.insert(1, '/home/saber/CoronalLoopBuilder')
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d # type: ignore
 
 import yt
-from utils.proj_imag import SyntheticFilterImage as synt_img
+from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
+from rushlight.visualization.colormaps import color_tables
 import astropy.units as u
 import numpy as np
 import sunpy.map
@@ -124,7 +125,7 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
             ax = fig.add_subplot(projection=synth_map)
             # synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
             synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
-            synth_map.plot_settings['cmap'] = ref_img.plot_settings['cmap']
+            synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom)
             synth_map.plot(axes=ax)
             ax.grid(False)
             synth_map.draw_limb()
