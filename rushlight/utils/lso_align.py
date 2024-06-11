@@ -275,7 +275,7 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     north0 = [midptn_cart[0].value, midptn_cart[1].value, midptn_cart[2].value]
     # Transformation to MHD coordinate frame
     north = [0, 0, 0]
-    north = np.dot(transformation, north0)
+    north = -np.dot(transformation, north0)
 
     # north = north0
     print("North:")
