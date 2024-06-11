@@ -4,6 +4,8 @@ from yt.data_objects.static_output import Dataset
 
 from scipy import interpolate
 
+from rushlight.config import config
+
 '''
 Class to plot synthetic X-ray images as observed from Hinode XRT
 '''
