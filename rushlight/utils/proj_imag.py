@@ -8,8 +8,8 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-from emission_models import uv, xrt, xray_bremsstrahlung
-from visualization.colormaps import color_tables
+from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
+from rushlight.visualization.colormaps import color_tables
 
 # Importing sunpy dependencies for a synthetic map
 # See creating custom maps: https://docs.sunpy.org/en/stable/how_to/create_custom_map.html
@@ -131,8 +131,9 @@ class SyntheticFilterImage():
             item=self.__imag_field,  # respective field that is being projected
             north_vector=self.view_settings['north_vector'])
 
-        # self.image = np.rot90(np.array(prji), k=3)
-        self.image = np.array(prji)
+        # transpose synthetic image (swap axes for imshow)
+        self.image = np.array(prji).T
+
 
         self.image_zoom = kwargs.get('image_zoom', None)
         if self.image_zoom:
