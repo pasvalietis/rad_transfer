@@ -29,7 +29,7 @@ class XRTModel:
         self.domain_dimensions = ds.domain_dimensions
 
     def process_data(self, chunk):
-        trm_path = '../instr/hinode_xrt/xrt_temp_response.npy'
+        trm_path = config.INSTRUMENTS['HINODE_XRT_TEMP_RESPONSE']
         xrt_trm = np.load(trm_path, allow_pickle=True)
 
         channel = self.channel
