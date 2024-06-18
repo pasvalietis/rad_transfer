@@ -1,10 +1,11 @@
+# New version of calc_vect (Finalized Pipeline Jun 17)
+
 import sys
 sys.path.insert(1, '/home/saber/CoronalLoopBuilder')
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d # type: ignore
 
 import yt
-from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
-from rushlight.visualization.colormaps import color_tables
+from utils.proj_imag import SyntheticFilterImage as synt_img
 import astropy.units as u
 import numpy as np
 import sunpy.map
@@ -105,7 +106,7 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
 
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp, frame='heliographic_stonyhurst',
                   observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
-    
+
     # Import scale from an AIA image:
     synth_map = xrt_synthetic.make_synthetic_map(
                                                  obstime=ref_img.reference_coordinate.obstime,
@@ -125,22 +126,20 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
             ax = fig.add_subplot(projection=synth_map)
             # synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
             synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
-            synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom)
+            synth_map.plot_settings['cmap'] = ref_img.plot_settings['cmap']
             synth_map.plot(axes=ax)
             ax.grid(False)
             synth_map.draw_limb()
 
             # Plotting key map points [debug purposes]
-            center = SkyCoord(lon=lon, lat=lat, radius=1*u.cm, frame='heliographic_stonyhurst',
-                  observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
             # coord=synth_map.reference_coordinate
             # pixels = synth_map.wcs.world_to_pixel(coord)
             # coord_img=ref_img.reference_coordinate
             # pixels_img=ref_img.wcs.world_to_pixel(coord_img)
             # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
-            ax.plot_coord(fm, 'o', color='r')
+            # ax.plot_coord(coord, 'o', color='r')
             # ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
-            ax.plot_coord(center, 'o', color='b')
+            # ax.plot_coord(coord_img, 'o', color='b')
             # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
             # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
 
@@ -174,9 +173,8 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
             height = dims['height']
             phi0 = dims['phi0']
             theta0 = dims['theta0']
-            el = dims['el'] # + 45*u.deg
-            # az = dims['az'] + 180*u.deg
-            az = 0*u.deg
+            el = dims['el']
+            az = dims['az']
             f.close()
     else:
         # Set the loop parameters using the provided values or default values
@@ -190,9 +188,9 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     r_1 = const.R_sun
 
     r0 = r_1 + height
-    x0 = u.Quantity(0 * u.cm)
-    y0 = u.Quantity(0 * u.cm)
-    z0 = r0.to(u.cm)
+    x0 = u.Quantity(0 * u.Mm)
+    y0 = u.Quantity(0 * u.Mm)
+    z0 = r0.to(u.Mm)
 
     theta = el.to(u.rad).value  # np.pi / 2  # Elevation angle
     phi = az.to(u.rad).value #+ np.pi / 2 # np.pi / 4  # Azimuth angle
@@ -217,49 +215,37 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 
     i_r = np.where(r > r_1)
 
+    r = r[i_r]
     x = x[i_r]
     y = y[i_r]
     z = z[i_r]
 
-    # Define the vectors v1 and v2
+    rmax = np.argmax(np.abs(r))
+
+    # Define the vectors v1 and v2 (from center of sun to footpoints)
     v1 = np.array([x[0].value, y[0].value, z[0].value]) * x[0].unit
     v2 = np.array([x[-1].value, y[-1].value, z[-1].value]) * x[0].unit
+    v3 = np.array([x[rmax].value, y[rmax].value, z[rmax].value]) * x[0].unit
 
     # Inter-FootPoint distance
-    ifpd = np.linalg.norm(v1-v2)
+    v_12 = v1-v2 # x-direction in mhd frame
+    ifpd = np.linalg.norm(v_12)
 
-    # Use the cross product to determine the orientation
-    # cross_product = np.cross(v1, v2) if az.value < 90 else -np.cross(v1, v2)
-    cross_product = np.cross(v1, v2)
+    # vectors going from footpoint to top of loop
+    v1_loop = v3 - v1
+    v2_loop = v3 - v2
 
-    nothing=[[1,0,0],
-             [0,1,0],
-             [0,0,1]]
-    # +90 degree rotation around y axis
-    yax90 = [[0,0,1],
-             [0,1,0],
-             [-1,0,0]]
-    # +90 degree rotation around y axis inverted
-    yax90i = [[0,0,-1],
-             [0,1,0],
-             [1,0,0]]
-    # swap y and z
-    y_z =   [[1,0,0],
-             [0,0,1],
-             [0,1,0]]
-    # x = y, y = z, z = x
-    custom =[[0,1,0],
-             [0,0,1],
-             [1,0,0]]
-    # x = z, y = x, z = y
-    customi=[[0,0,1],
-             [1,0,0],
-             [0,1,0]]
-    
-    transformation = yax90
+    # Use the cross product to determine the orientation of the loop plane
+    cross_product = np.cross(v1_loop, v2_loop) # z-direction in mhd frame
+
+    tip_up = np.cross(v_12, cross_product) # y-direction in mhd frame
+
+    # Retrieve the transformation from Heliographic stonyhurst to MHD frame
+    transformation = get_trsfm(keyword=None)
 
     # Normal Vector
     norm0 = cross_product / np.linalg.norm(cross_product)
+    # norm0 = [0.041, 0.356, -1.812]
     # Transformation to MHD coordinate frame
     norm = [0, 0, 0]
     norm = np.dot(transformation, norm0)
@@ -273,9 +259,10 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     
     # North Vector
     north0 = [midptn_cart[0].value, midptn_cart[1].value, midptn_cart[2].value]
+    # north0 = [-0.012, 0.997, -0.079]
     # Transformation to MHD coordinate frame
     north = [0, 0, 0]
-    north = -np.dot(transformation, north0)
+    north = np.dot(transformation, north0)
 
     # north = north0
     print("North:")
@@ -283,5 +270,49 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     print("\n")
 
     lat, lon = theta0, phi0
-    # normal vector, north vector, latitude, longitude
     return norm, north, lat, lon, radius, height, ifpd
+
+def get_trsfm(keyword=None):
+
+    if keyword:
+        # +90 degree rotation around y axis
+        yax90 = [[0,0,1],
+                [0,1,0],
+                [-1,0,0]]
+        # +90 degree rotation around y axis inverted
+        yax90i = [[0,0,-1],
+                [0,1,0],
+                [1,0,0]]
+        # swap y and z
+        y_z =   [[1,0,0],
+                [0,0,1],
+                [0,1,0]]
+        # swap x and y
+        x_y =  [[0,1,0],
+                [1,0,0],
+                [0,0,1]]
+        # x = y, y = z, z = x
+        custom =[[0,1,0],
+                [0,0,1],
+                [1,0,0]]
+        # x = z, y = x, z = y
+        customi=[[0,0,1],
+                [1,0,0],
+                [0,1,0]]
+        
+        trsfms = {
+            "yax90" : yax90,
+            "yax90i" : yax90i,
+            "y_z" : y_z,
+            "x_y" : x_y,
+            "custom" : custom,
+            "customi": customi,
+        }
+
+        trsfm = trsfms[keyword]
+    else:
+        trsfm= [[1,0,0],
+                [0,1,0],
+                [0,0,1]]
+
+    return trsfm
