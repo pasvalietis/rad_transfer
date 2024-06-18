@@ -54,6 +54,7 @@ class Config:
 
         # Acquiring data
         self.JSOC_EMAIL = config_data['DEFAULT']['JSOC_EMAIL']
+        self.CLB_PATH = config_data['CLB_PATH']
 
         self.INSTRUMENTS = config_data['INSTRUMENTS']
         self.OBSERVATIONS = config_data['OBSERVATIONS']
