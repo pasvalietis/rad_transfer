@@ -1,12 +1,11 @@
-# New version of calc_vect (Finalized Pipeline Jun 17)
-
-import sys
-sys.path.insert(1, '/home/saber/CoronalLoopBuilder')
-from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d # type: ignore
+# in-progress calc_vect (Jun 20)
 from rushlight.config import config
+from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
+import sys
+sys.path.insert(1, config.CLB_PATH)
+from CoronalLoopBuilder.builder import CoronalLoopBuilder, circle_3d # type: ignore
 
 import yt
-from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
 import astropy.units as u
 import numpy as np
 import sunpy.map
@@ -20,6 +19,7 @@ import matplotlib.colors as colors
 # Method to create synthetic map of MHD data from rad_transfer
 def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, **kwargs):
     '''
+    Method for plotting sunpy map of synthetic projection aligned to CLB flare loop
 
     @param params_path: string path to pickled Coronal Loop Builder loop parameters
     @param smap_path: string path to the reference map
@@ -30,18 +30,6 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
                    'instr' - simulated instrument (xrt or aia); 'channel' - simulated wavelength (in nm or eg. Ti-poly)
     @return: ax - axes object pointing to plotted synthetic image
     '''
-
-    """
-
-    @param img: Real image to project synthetic map onto
-    @param fig: Matplotlib figure reference for plotting
-    @param normvector: Vector indicating vector normal to the surface of the sun
-    @param northvector: Vector indicating pointing direction for candleflame 'tip' of flare
-    @param comp: 'True' for real + synthetic image, 'False' for just synthetic image
-    @param fm_coord: Coordinate for the foot midpoint of the flare loop
-    @param kwargs: 
-    @return:
-    """
 
     # Retrieve reference image (ref_img)
     try:
@@ -59,8 +47,8 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
         raise Exception('Please provide either a map (xmap) or path to pickled map (xmap_path)')
 
     # Load subsampled 3D MHD file
-    shen_datacube = '/home/saber/PycharmProjects/rad_transfer_/datacubes/subs_3_flarecs-id_0065.h5'
-    downs_file_path = kwargs.get('datacube', shen_datacube)
+    shen_datacube_65 = config.SIMULATIONS['DATASET']
+    downs_file_path = kwargs.get('datacube', shen_datacube_65)
     subs_ds = yt.load(downs_file_path)
 
     # Crop MHD file
@@ -78,7 +66,7 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
 
     # Calculate normal and north vectors for synthetic image alignment
     # Also retrieve lat, lon coords from loop params
-    normvector, northvector, lat, lon, radius, height, ifpd = calc_vect(pkl=params_path, ref_img = ref_img)
+    normvector, northvector, lat, lon, radius, height, ifpd = calc_vect(pkl=params_path, ref_img=ref_img)
 
     # Match parameters of the synthetic image to observed one
     samp_resolution = ref_img.data.shape[0]
@@ -93,6 +81,11 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
                            'vmax': 8e1,
                            'cmap': 'inferno',
                            'logscale': True}
+
+    # NOTE - TESTING
+    # normvector=  [0,0,1]
+    # northvector= [1,0,0]
+    #~~~~~~~~~~~~~~~
 
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
@@ -225,36 +218,32 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 
     rmax = np.argmax(np.abs(r))
 
-    # Define the vectors v1 and v2 (from center of sun to footpoints)
+    # UP TO THIS POINT, x, y and z are in HELIOCENTRIC COORDINATES
+    hcc_frame = Heliocentric(observer=SkyCoord(
+        lon=phi0, lat=theta0, radius=r_1, frame='heliographic_stonyhurst'))
+    hs_loop = SkyCoord(x=x, y=y, z=z, frame=hcc_frame).transform_to('heliographic_stonyhurst')
+    x = hs_loop.cartesian.x
+    y = hs_loop.cartesian.y
+    z = hs_loop.cartesian.z
+
+    # v1, v2 - center of sun to footpoint | v3 - center of sun to top of loop
     v1 = np.array([x[0].value, y[0].value, z[0].value]) * x[0].unit
     v2 = np.array([x[-1].value, y[-1].value, z[-1].value]) * x[0].unit
     v3 = np.array([x[rmax].value, y[rmax].value, z[rmax].value]) * x[0].unit
-
-    # Inter-FootPoint distance
-    v_12 = v1-v2 # x-direction in mhd frame
-    ifpd = np.linalg.norm(v_12)
-
     # vectors going from footpoint to top of loop
     v1_loop = v3 - v1
     v2_loop = v3 - v2
-
-    # Use the cross product to determine the orientation of the loop plane
+   
+    v_12 = v1-v2 # x-direction in mhd frame
+    ifpd = np.linalg.norm(v_12)  # Inter-FootPoint Distance
     cross_product = np.cross(v1_loop, v2_loop) # z-direction in mhd frame
-
-    tip_up = np.cross(v_12, cross_product) # y-direction in mhd frame
-
-    # Retrieve the transformation from Heliographic stonyhurst to MHD frame
-    transformation = get_trsfm(keyword=None)
-
-    # Normal Vector
-    norm0 = cross_product / np.linalg.norm(cross_product)
     
     '''
     Missing part --> expressing norm vector in Mhd coord frame, Calculate projections
     '''
     
-    z_mhd = norm0
-    x_mhd = v_12 / np.linalg.norm(v_12)
+    x_mhd = v_12 / ifpd
+    z_mhd = cross_product / np.linalg.norm(cross_product)
     zx_cross = np.cross(z_mhd, x_mhd)
     y_mhd = zx_cross / np.linalg.norm(zx_cross)
     
@@ -274,52 +263,41 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
         print("\n\nHandled Exception:\n")
         raise Exception('Please provide Observation time from the Reference Image')
         
-    
-    #los_frame = Heliocentric(observer=SkyCoord(
-     #   lon=0.*u.rad, lat=0.*u.rad, radius=r_1, frame='heliographic_stonyhurst'))
-    
-    #los_vector = SkyCoord(x=-1, y=0, z=0, frame=los_frame).transform_to('heliographic_stonyhurst')
-    
+    # Get observer's los to the center of the sun
     los_vector = ref_img.observer_coordinate
-    
-    #los_vector = SkyCoord(0*u.rad, 0*u.rad, frame = 'helioprojective', observer = 'earth', obstime = ref_img.reference_coordinate.obstime)
-    
-    #los_vector = los_vector.transform_to(frame = 'heliographic_stonyhurst', representation_type='cartesian')
     los_vector_cart = np.array([los_vector.cartesian.x.value,
                                 los_vector.cartesian.y.value,
                                 los_vector.cartesian.z.value])
     
+    # Transform observer's los to norm vector for mhd
     los_vec = los_vector_cart / np.linalg.norm(los_vector_cart)
-    
-    norm_vec = np.dot(stonyh_to_mhd, los_vec)
-    norm_vec = norm_vec / np.linalg.norm(norm_vec)
-    
-    # norm0 = [0.041, 0.356, -1.812]
-    # Transformation to MHD coordinate frame
-    #norm = [0, 0, 0]
-    #norm = np.dot(transformation, norm0)
+    norm = np.dot(stonyh_to_mhd, los_vec)
+    norm = norm / np.linalg.norm(norm)
 
     print("\nNorm:")
-    print(norm_vec)
+    print(norm)
 
     # Derive the cartesian coordinates of a normalized vector pointing in the direction
     # of the coronal loop's spherical coordinates (midpoint of footpoints)
-    midptn_cart = stc(1, theta0, phi0)
-    
-    # North Vector
-    north0 = [midptn_cart[0].value, midptn_cart[1].value, midptn_cart[2].value]
-    # north0 = [-0.012, 0.997, -0.079]
-    # Transformation to MHD coordinate frame
-    north = [0, 0, 0]
-    north = np.dot(transformation, north0)
+    midptn_coords = (
+            SkyCoord(lon=phi0, lat=theta0, radius=const.R_sun, frame='heliographic_stonyhurst'))
+    # midptn_cart = stc(1, theta0, phi0)
+    mpx = midptn_coords.cartesian.x
+    mpy = midptn_coords.cartesian.y
+    mpz = midptn_coords.cartesian.z
 
-    # north = north0
+    midptn_cart = [mpx, mpy, mpz]
+    north0 = [midptn_cart[0].value, midptn_cart[1].value, midptn_cart[2].value]
+    north = np.dot(stonyh_to_mhd, north0)
+
+    north = [-1,0,0]
+
     print("North:")
     print(north)
     print("\n")
 
     lat, lon = theta0, phi0
-    return norm_vec, north, lat, lon, radius, height, ifpd
+    return norm, north, lat, lon, radius, height, ifpd
 
 def get_trsfm(keyword=None):
 
