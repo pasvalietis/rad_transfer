@@ -23,7 +23,7 @@ import matplotlib.colors as colors
 
 
 # Method to create synthetic map of MHD data from rad_transfer
-def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, **kwargs):
+def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, params=None, **kwargs):
     """
     Method for plotting sunpy map of synthetic projection aligned to CLB flare loop
 
@@ -148,7 +148,9 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, *
             ax = fig.add_subplot(projection=synth_map)
 
         return ax, synth_map
-
+    
+    elif params:
+        return synth_map, normvector, northvector
     else:
         return synth_map
 
