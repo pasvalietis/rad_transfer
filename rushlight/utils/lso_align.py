@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
 """Script to calculate normal and north directions to align synthetic image with observations.
-Current version 7/25/24
+Current version 7/6/24
 """
+
 import sys
 
-from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 from rushlight.config import config
 from rushlight.visualization.colormaps import color_tables
 sys.path.insert(1, config.CLB_PATH)
+from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 
 import yt
 from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
@@ -20,22 +21,28 @@ import pickle
 from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
 from sunpy.coordinates import Heliocentric
 import matplotlib.colors as colors
+import matplotlib.pyplot as plt
+from astropy.units import Quantity
 
 
-# Method to create synthetic map of MHD data from rad_transfer
-def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, params=None, **kwargs):
-    """
-    Method for plotting sunpy map of synthetic projection aligned to CLB flare loop
+def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None, 
+                  fig: plt.figure=None, plot: str=None, params=None, **kwargs):
+    """Method for plotting sunpy map of synthetic projection aligned to CLB flare loop
 
-    @param params_path: string path to pickled Coronal Loop Builder loop parameters
-    @param smap_path: string path to the reference map
-    @param smap: sunpy reference map object
-    @param fig: matplotlib figure object
-    @param plot: string hint for kind of plot to produce
-    @param kwargs: 'datacube' - path to simulation file; 'center', 'left_edge', 'right_edge' - bounds of simulation box
-                   'instr' - simulated instrument (xrt or aia); 'channel' - simulated wavelength (in nm or eg. Ti-poly)
-    @return: ax - axes object pointing to plotted synthetic image
-    """
+    :param params_path: path to pickled Coronal Loop Builder loop parameters
+    :type params_path: string
+    :param smap_path: path to the reference map, defaults to None
+    :type smap_path: string, optional
+    :param smap: sunpy reference map object, defaults to None
+    :type smap: sunpy.map.Map, optional
+    :param fig: Matplotlib Figure Instance, defaults to None
+    :type fig: matplotlib.pyplot.fig, optional
+    :param plot: string hint for kind of plot to produce, defaults to None
+    :type plot: string, optional
+    :raises Exception: NullReference
+    :return: Sunpy synthetic map and optionally matplotlib axes object
+    :rtype: sunpy.map.Map , matplotlib.pyplot.axes
+    """    
 
     # Retrieve reference image (ref_img)
     try:
@@ -53,7 +60,7 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, p
         raise Exception('Please provide either a map (xmap) or path to pickled map (xmap_path)')
 
     # Load subsampled 3D MHD file
-    shen_datacube = '/home/saber/PycharmProjects/rad_transfer_/datacubes/subs_3_flarecs-id_0065.h5'
+    shen_datacube = config.SIMULATIONS['DATASET']
     downs_file_path = kwargs.get('datacube', shen_datacube)
     subs_ds = yt.load(downs_file_path)
 
@@ -61,12 +68,14 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, p
     center = [0.0, 0.5, 0.0]
     left_edge = [-0.5, 0.016, -0.25]
     right_edge = [0.5, 1.0, 0.25]
+
     cut_box = subs_ds.region(center=kwargs.get('center', center), left_edge=kwargs.get('left_edge', left_edge),
                              right_edge=kwargs.get('right_edge', right_edge))
 
+    instr = ref_img.instrument.split(' ')[0].lower()
     # Instrument settings for synthetic image
-    instr = kwargs.get('instr', 'xrt')  # keywords: 'aia' or 'xrt'
-    channel = kwargs.get('channel', 'Ti-poly')
+    instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
+    channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
     # Prepare cropped MHD data for imaging
     xrt_synthetic = synt_img(cut_box, instr, channel)
 
@@ -75,43 +84,57 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, p
     normvector, northvector, lat, lon, radius, height, ifpd = calc_vect(pkl=params_path, ref_img = ref_img)
 
     # Match parameters of the synthetic image to observed one
-    samp_resolution = ref_img.data.shape[0]
     s = 1   # unscaled
     # s = 1.5 # 2012
     # s = 3   # 2013
     obs_scale = [ref_img.scale.axis1/s, ref_img.scale.axis2/s] * (u.arcsec / u.pixel)
 
     # Dynamic synth plot settings
-    synth_plot_settings = {'resolution': samp_resolution,
+    synth_plot_settings = {'resolution': ref_img.data.shape[0],
                            'vmin': 1e-15,
                            'vmax': 8e1,
                            'cmap': 'inferno',
                            'logscale': True}
 
+    # normvector = [0,0,1]
+    # northvector = [0,1,0]
+
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
+    x, y = diff_roll(ref_img, lon, lat, **kwargs)
+
     xrt_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
-                                image_shift=[0, 0],  # move the bottom center of the flare in [x,y]
+                                image_shift=[x, y],  # move the bottom center of the flare in [x,y]
                                 bkg_fill=np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
     disp = hheight/s + height + radius
+    # disp = hheight
+    # disp = 0
 
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
                   frame='heliographic_stonyhurst',
                   observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
 
+    kwargs = {'obstime': ref_img.reference_coordinate.obstime,
+            #   'reference_coord': fm,
+              'reference_coord': ref_img.reference_coordinate,
+              'reference_pixel': u.Quantity(ref_img.reference_pixel), 
+            #   'scale': obs_scale,
+              'scale': u.Quantity(ref_img.scale),
+              'telescope': ref_img.detector,
+              'observatory': ref_img.observatory,
+              'detector': ref_img.detector,
+            #   'instrument': ref_img.instrument,
+              'exposure': ref_img.exposure_time,
+              'unit': ref_img.unit,
+              }
+
     # Import scale from an AIA image:
-    synth_map = xrt_synthetic.make_synthetic_map(
-                                                 obstime=ref_img.reference_coordinate.obstime,
-                                                 observer='earth',
-                                                 detector='Synthetic XRT',
-                                                 scale=obs_scale,
-                                                 reference_coord=fm,
-                                                 )
+    synth_map = xrt_synthetic.make_synthetic_map(**kwargs)
 
     if fig:
         if plot == 'comp':
@@ -129,15 +152,17 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, p
             ax.grid(False)
             synth_map.draw_limb()
 
-            # Plotting key map points [debug purposes]
             # coord=synth_map.reference_coordinate
-            # pixels = synth_map.wcs.world_to_pixel(coord)
             # coord_img=ref_img.reference_coordinate
+            # ax.plot_coord(coord, 'o', color='r')
+            # ax.plot_coord(coord_img, 'o', color='b')
+
+            # Plotting key map points [debug purposes]
+            # pixels = synth_map.wcs.world_to_pixel(coord)
             # pixels_img=ref_img.wcs.world_to_pixel(coord_img)
             # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
-            # ax.plot_coord(coord, 'o', color='r')
             # ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
-            # ax.plot_coord(coord_img, 'o', color='b')
+
             # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
             # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
 
@@ -148,15 +173,32 @@ def synthmap_plot(params_path, smap_path=None, smap=None, fig=None, plot=None, p
             ax = fig.add_subplot(projection=synth_map)
 
         return ax, synth_map
-    
-    elif params:
-        return synth_map, normvector, northvector
+
     else:
         return synth_map
 
+def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: Quantity=0 * u.deg, phi0: Quantity=0 * u.deg, 
+              el: Quantity=90 * u.deg, az: Quantity=0 * u.deg, samples_num: int=100, **kwargs):
+    """Calculates the north and normal vectors for the synthetic image
 
-def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u.deg, el=90 * u.deg, az=0 * u.deg,
-              samples_num=100, **kwargs):
+    :param radius: radius of the CLB loop, defaults to const.R_sun
+    :type radius: Quantity, optional
+    :param height: height of the center of the CLB loop above solar surface, defaults to 10*u.Mm
+    :type height: Quantity, optional
+    :param theta0: longitude coordinate, defaults to 0*u.deg
+    :type theta0: Quantity, optional
+    :param phi0: latitude coordinate, defaults to 0*u.deg
+    :type phi0: Quantity, optional
+    :param el: angle of CLB loop relative to tangent plane of solar surface, defaults to 90*u.deg
+    :type el: Quantity, optional
+    :param az: rotation of CLB loop around vector normal to solar surface, defaults to 0*u.deg
+    :type az: Quantity, optional
+    :param samples_num: Number of points that make up the CLB loop, defaults to 100
+    :type samples_num: int, optional
+    :raises Exception: Null reference to kwargs member
+    :return: norm, north, lat, lon, radius, height, ifpd
+    :rtype: list, list, Quantity, Quantity, Quantity, Quantity, float
+    """    
 
     DEFAULT_RADIUS = 10.0 * u.Mm
     DEFAULT_HEIGHT = 0.0 * u.Mm
@@ -187,7 +229,11 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
 
     # Define the vectors v1 and v2 (from center of sun to footpoints)
     
-    loop_coords = semi_circle_loop(radius, height, theta0, phi0, el, az, samples_num=100)[0].cartesian
+    try:
+        loop_coords = semi_circle_loop(radius, 0, 0, False, height, theta0, phi0, el, az, samples_num=100)[0].cartesian
+    except:
+        print("Error handled: Your CLB does not support semicircles \n")
+        loop_coords = semi_circle_loop(radius, height, theta0, phi0, el, az, samples_num=100)[0].cartesian
 
     v1 = np.array([loop_coords[0].x.value, 
                    loop_coords[0].y.value,
@@ -299,7 +345,15 @@ def calc_vect(radius=const.R_sun, height=10 * u.Mm, theta0=0 * u.deg, phi0=0 * u
     lat, lon = theta0, phi0
     return norm_vec, north_vec, lat, lon, radius, height, ifpd
 
-def get_trsfm(keyword=None):
+def get_trsfm(keyword: str=None):
+    """***DEPRECIATED*** 
+    Returns preset transformation matrices corresponding to particular rotations
+
+    :param keyword: Hint for kind of rotation to produce, defaults to None
+    :type keyword: str, optional
+    :return: 2D transformation matrix
+    :rtype: list
+    """
 
     if keyword:
         # +90 degree rotation around y axis
@@ -343,3 +397,59 @@ def get_trsfm(keyword=None):
                 [0,0,1]]
 
     return trsfm
+
+def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
+    """Calculate amount to shift image by difference between observed foot midpoint
+    and selected "shift origin"
+
+    :param ref_img: Reference observed image for the synthetic map
+    :type ref_img: sunpy.map.Map
+    :param lon: Longitude coordinate for CLB foot midpoint (u.deg)
+    :type lon: Quantity
+    :param lat: Latitude coordinate for CLB foot midpoint (u.deg)
+    :type lat: Quantity
+    :return: Displacement vector x, y
+    :rtype: int , int
+    """
+    
+    # Calculate amount to shift image by
+    # Difference between foot midpoint and shift origin
+
+    shift_origin = kwargs.get("sh_ori", "ref")
+    if shift_origin == 'fpt0':
+        # Manually Selected Synthetic Footpoint (2012-07-19 Event)
+        fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
+        fpt_pix = ref_img.wcs.world_to_pixel(fpt_coord)
+
+        ori_pix = fpt_pix
+    else:
+        # Reference Pixel (Center of View)
+        ref = ref_img.reference_coordinate
+        ref_pix = ref_img.wcs.world_to_pixel(ref)
+        
+        ori_pix = ref_pix
+
+
+    # Foot Midpoint
+    mpt = SkyCoord(lon=lon, lat=lat, radius=const.R_sun,
+                frame='heliographic_stonyhurst',
+                observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
+    mpt_pix = ref_img.wcs.world_to_pixel(mpt)
+
+    
+    x1 = float(mpt_pix[0])
+    y1 = float(mpt_pix[1])
+
+    x2 = float(ori_pix[0])
+    y2 = float(ori_pix[1])
+
+    x = int(x1-x2)
+    y = int(y1-y2)
+
+    if kwargs.get('noroll', False):
+        x = 0
+        y = 0
+
+    return x, y
+
+
