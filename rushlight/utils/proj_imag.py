@@ -176,7 +176,8 @@ class SyntheticFilterImage():
         # Define header parameters for the synthetic image
 
         # Coordinates can be passed from sunpy maps that comparisons are made width
-        self.reference_coord = kwargs.get('reference_coord', SkyCoord(0*u.arcsec, 0*u.arcsec,
+        self.reference_coord = kwargs.get('reference_coord', 
+                                   SkyCoord(0*u.arcsec, 0*u.arcsec,
                                    obstime=self.obstime,
                                    observer='earth',  # Temporarily 1 AU away
                                    frame=frames.Helioprojective))
