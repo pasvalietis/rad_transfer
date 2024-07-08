@@ -176,8 +176,7 @@ class SyntheticFilterImage():
         # Define header parameters for the synthetic image
 
         # Coordinates can be passed from sunpy maps that comparisons are made width
-        self.reference_coord = kwargs.get('reference_coord', 
-                                   SkyCoord(0*u.arcsec, 0*u.arcsec,
+        self.reference_coord = kwargs.get('reference_coord', SkyCoord(0*u.arcsec, 0*u.arcsec,
                                    obstime=self.obstime,
                                    observer='earth',  # Temporarily 1 AU away
                                    frame=frames.Helioprojective))
@@ -197,9 +196,9 @@ class SyntheticFilterImage():
         self.detector = kwargs.get('detector', 'Synthetic')
         self.instrument = kwargs.get('instrument', None)
         if isinstance(self.channel, int):
-            self.wavelength = int(self.channel) * u.angstrom
+            self.wavelength = kwargs.get('wavelength', int(self.channel) * u.angstrom)
         else:
-            self.wavelength = None
+            self.wavelength = kwargs.get('wavelength', None)
         self.exposure = kwargs.get('exposure', None)
         self.unit = kwargs.get('unit', None)
 
@@ -218,6 +217,24 @@ class SyntheticFilterImage():
 
         self.synth_map = sunpy.map.Map(data, header)
         return self.synth_map
+
+    def project_points(self, dataset=None, image=None):
+        """
+        Identify pixels where three dimensional points from the original dataset are projected
+        on the image plane
+        TODO: Add markers on the synthetic image object
+        :return: x, y -- pixels on which the point inside synthetic datacube projects to
+        """
+        if dataset is None:
+            dataset = self.data #self.region
+        if image is None:
+            image = self.image
+
+        # Create a dummy PlotMPL plot that will take data and coord system from the initial dataset
+
+        # Use yt function sanitize_coord_system to export x, y values of the point in the image plane
+
+
 
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
