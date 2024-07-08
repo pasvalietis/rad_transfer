@@ -40,8 +40,8 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     :param plot: string hint for kind of plot to produce, defaults to None
     :type plot: string, optional
     :raises Exception: NullReference
-    :return: Sunpy synthetic map and optionally matplotlib axes object
-    :rtype: sunpy.map.Map , matplotlib.pyplot.axes
+    :return: Tuple containing sunpy synthetic map and optionally matplotlib axes object
+    :rtype: tuple (sunpy.map.Map , matplotlib.pyplot.axes)
     """    
 
     # Retrieve reference image (ref_img)
@@ -197,7 +197,7 @@ def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: 
     :type samples_num: int, optional
     :raises Exception: Null reference to kwargs member
     :return: norm, north, lat, lon, radius, height, ifpd
-    :rtype: list, list, Quantity, Quantity, Quantity, Quantity, float
+    :rtype: tuple (list, list, Quantity, Quantity, Quantity, Quantity, float)
     """    
 
     DEFAULT_RADIUS = 10.0 * u.Mm
@@ -409,7 +409,7 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
     :param lat: Latitude coordinate for CLB foot midpoint (u.deg)
     :type lat: Quantity
     :return: Displacement vector x, y
-    :rtype: int , int
+    :rtype: tuple (int , int)
     """
     
     # Calculate amount to shift image by
