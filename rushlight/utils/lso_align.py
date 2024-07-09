@@ -427,7 +427,11 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
     shift_origin = kwargs.get("sh_ori", "ref")
     if shift_origin == 'fpt0':
         # Manually Selected Synthetic Footpoint (2012-07-19 Event)
-        fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
+        #fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
+        
+        # 2011 event
+        fpt_coord = SkyCoord(-265*u.arcsec, 283*u.arcsec, frame=ref_img.coordinate_frame)
+        
         fpt_pix = ref_img.wcs.world_to_pixel(fpt_coord)
 
         ori_pix = fpt_pix
