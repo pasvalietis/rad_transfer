@@ -77,7 +77,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
     channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
     # Prepare cropped MHD data for imaging
-    xrt_synthetic = synt_img(cut_box, instr, channel)
+    synth_imag = synt_img(cut_box, instr, channel)
 
     # Calculate normal and north vectors for synthetic image alignment
     # Also retrieve lat, lon coords from loop params
@@ -104,7 +104,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     x, y = diff_roll(ref_img, lon, lat, **kwargs)
 
-    xrt_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
+    synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
                                 image_shift=[x, y],  # move the bottom center of the flare in [x,y]
                                 bkg_fill=np.min(ref_img.data))
@@ -134,7 +134,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
               }
 
     # Import scale from an AIA image:
-    synth_map = xrt_synthetic.make_synthetic_map(**kwargs)
+    synth_map = synth_imag.make_synthetic_map(**kwargs)
 
     if fig:
         if plot == 'comp':
@@ -175,7 +175,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
         return ax, synth_map
 
     else:
-        return synth_map
+        return synth_map, normvector, northvector
 
 def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: Quantity=0 * u.deg, phi0: Quantity=0 * u.deg, 
               el: Quantity=90 * u.deg, az: Quantity=0 * u.deg, samples_num: int=100, **kwargs):
@@ -208,16 +208,25 @@ def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: 
     DEFAULT_AZ = 0.0 * u.deg
 
     if 'pkl' in kwargs:
-        with open(kwargs.get('pkl'), 'rb') as f:
-            dims = pickle.load(f)
-            # print(f'Loop dimensions loaded:{dims}')
+        if isinstance(kwargs.get('pkl') , dict):
+            dims = kwargs.get('pkl')
             radius = dims['radius']
             height = dims['height']
             phi0 = dims['phi0']
             theta0 = dims['theta0']
             el = dims['el']
             az = dims['az']
-            f.close()
+        else:
+            with open(kwargs.get('pkl'), 'rb') as f:
+                dims = pickle.load(f)
+                # print(f'Loop dimensions loaded:{dims}')
+                radius = dims['radius']
+                height = dims['height']
+                phi0 = dims['phi0']
+                theta0 = dims['theta0']
+                el = dims['el']
+                az = dims['az']
+                f.close()
     else:
         # Set the loop parameters using the provided values or default values
         radius = kwargs.get('radius', DEFAULT_RADIUS)
