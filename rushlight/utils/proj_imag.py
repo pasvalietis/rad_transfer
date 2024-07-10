@@ -4,6 +4,8 @@ import sys
 import numpy as np
 from scipy import ndimage #, datasets
 
+from skimage.util import random_noise
+
 import astropy.units as u
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -201,7 +203,11 @@ class SyntheticFilterImage():
             self.wavelength = kwargs.get('wavelength', None)
         self.exposure = kwargs.get('exposure', None)
         self.unit = kwargs.get('unit', None)
-
+        
+        self.poisson = kwargs.get('poisson', None)
+        if self.poisson:
+            data = 0.5*np.max(self.image) * random_noise(self.image / (0.5*np.max(self.image)), mode='poisson')
+        
         # Creating header using sunpy
         header = make_fitswcs_header(data,
                                      coordinate=self.reference_coord,
