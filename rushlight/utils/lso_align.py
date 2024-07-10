@@ -4,25 +4,31 @@
 Current version 7/6/24
 """
 
+import os
 import sys
-
-from rushlight.config import config
-from rushlight.visualization.colormaps import color_tables
-sys.path.insert(1, config.CLB_PATH)
-from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 
 import yt
 from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
+from rushlight.config import config
+from rushlight.visualization.colormaps import color_tables
+
+sys.path.insert(1, config.CLB_PATH)
+from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
+
 import astropy.units as u
+from astropy.units import Quantity
+from astropy.time import Time, TimeDelta
+import astropy.constants as const
+
 import numpy as np
 import sunpy.map
-import astropy.constants as const
+
 import pickle
 from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
 from sunpy.coordinates import Heliocentric
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-from astropy.units import Quantity
+
 
 
 def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None, 
@@ -61,15 +67,20 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Load subsampled 3D MHD file
     shen_datacube = config.SIMULATIONS['DATASET']
-    downs_file_path = kwargs.get('datacube', shen_datacube)
-    subs_ds = yt.load(downs_file_path)
+    dataset = kwargs.get('datacube', None)
+    if isinstance(dataset, str):
+        downs_file_path = kwargs.get('datacube', shen_datacube)
+        subs_ds = yt.load(downs_file_path)
+    else:
+        subs_ds = dataset
 
     # Crop MHD file
     center = [0.0, 0.5, 0.0]
     left_edge = [-0.5, 0.016, -0.25]
     right_edge = [0.5, 1.0, 0.25]
 
-    cut_box = subs_ds.region(center=kwargs.get('center', center), left_edge=kwargs.get('left_edge', left_edge),
+    cut_box = subs_ds.region(center=kwargs.get('center', center),
+                             left_edge=kwargs.get('left_edge', left_edge),
                              right_edge=kwargs.get('right_edge', right_edge))
 
     instr = ref_img.instrument.split(' ')[0].lower()
@@ -112,16 +123,26 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
     disp = hheight/s + height + radius
+        
     # disp = hheight
     # disp = 0
+    
+    timescale = kwargs.get('timescale', 109.8)
+    
+    timestep = subs_ds.current_time.value.item()
+    timediff = TimeDelta(timestep * timescale * u.s)
+    
+    start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
+    synth_obs_time = start_time + timediff
 
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
                   frame='heliographic_stonyhurst',
-                  observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
-
-    kwargs = {'obstime': ref_img.reference_coordinate.obstime,
+                  observer='earth', obstime=synth_obs_time).transform_to(frame='helioprojective')
+    
+    print('obstime:', synth_obs_time)
+    map_kwargs = {'obstime': synth_obs_time,
             #   'reference_coord': fm,
-              'reference_coord': ref_img.reference_coordinate,
+              #'reference_coord': ref_img.reference_coordinate,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
             #   'scale': obs_scale,
               'scale': u.Quantity(ref_img.scale),
@@ -131,10 +152,12 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             #   'instrument': ref_img.instrument,
               'exposure': ref_img.exposure_time,
               'unit': ref_img.unit,
+              'wavelength': kwargs.get('wavelength', ref_img.wavelength),
+              'poisson': kwargs.get('poisson', False),
               }
 
     # Import scale from an AIA image:
-    synth_map = synth_imag.make_synthetic_map(**kwargs)
+    synth_map = synth_imag.make_synthetic_map(**map_kwargs)
 
     if fig:
         if plot == 'comp':
