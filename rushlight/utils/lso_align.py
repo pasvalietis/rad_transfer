@@ -81,7 +81,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Calculate normal and north vectors for synthetic image alignment
     # Also retrieve lat, lon coords from loop params
-    normvector, northvector, lat, lon, radius, height, ifpd = calc_vect(pkl=params_path, ref_img = ref_img)
+    normvector, northvector, lat, lon, radius, height, ifpd = calc_vect(pkl=params_path, ref_img=ref_img)
 
     # Match parameters of the synthetic image to observed one
     s = 1   # unscaled
@@ -114,10 +114,6 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     disp = hheight/s + height + radius
     # disp = hheight
     # disp = 0
-
-    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
-                  frame='heliographic_stonyhurst',
-                  observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
 
     kwargs = {'obstime': ref_img.reference_coordinate.obstime,
             #   'reference_coord': fm,
