@@ -4,25 +4,31 @@
 Current version 7/6/24
 """
 
+import os
 import sys
-
-from rushlight.config import config
-from rushlight.visualization.colormaps import color_tables
-sys.path.insert(1, config.CLB_PATH)
-from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 
 import yt
 from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
+from rushlight.config import config
+from rushlight.visualization.colormaps import color_tables
+
+sys.path.insert(1, config.CLB_PATH)
+from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
+
 import astropy.units as u
+from astropy.units import Quantity
+from astropy.time import Time, TimeDelta
+import astropy.constants as const
+
 import numpy as np
 import sunpy.map
-import astropy.constants as const
+
 import pickle
 from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
 from sunpy.coordinates import Heliocentric
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-from astropy.units import Quantity
+
 
 
 def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None, 
@@ -61,15 +67,20 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Load subsampled 3D MHD file
     shen_datacube = config.SIMULATIONS['DATASET']
-    downs_file_path = kwargs.get('datacube', shen_datacube)
-    subs_ds = yt.load(downs_file_path)
+    dataset = kwargs.get('datacube', None)
+    if isinstance(dataset, str):
+        downs_file_path = kwargs.get('datacube', shen_datacube)
+        subs_ds = yt.load(downs_file_path)
+    else:
+        subs_ds = dataset
 
     # Crop MHD file
     center = [0.0, 0.5, 0.0]
     left_edge = [-0.5, 0.016, -0.25]
     right_edge = [0.5, 1.0, 0.25]
 
-    cut_box = subs_ds.region(center=kwargs.get('center', center), left_edge=kwargs.get('left_edge', left_edge),
+    cut_box = subs_ds.region(center=kwargs.get('center', center),
+                             left_edge=kwargs.get('left_edge', left_edge),
                              right_edge=kwargs.get('right_edge', right_edge))
 
     instr = ref_img.instrument.split(' ')[0].lower()
@@ -77,7 +88,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
     channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
     # Prepare cropped MHD data for imaging
-    xrt_synthetic = synt_img(cut_box, instr, channel)
+    synth_imag = synt_img(cut_box, instr, channel)
 
     # Calculate normal and north vectors for synthetic image alignment
     # Also retrieve lat, lon coords from loop params
@@ -104,7 +115,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     x, y = diff_roll(ref_img, lon, lat, **kwargs)
 
-    xrt_synthetic.proj_and_imag(plot_settings=synth_plot_settings,
+    synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
                                 image_shift=[x, y],  # move the bottom center of the flare in [x,y]
                                 bkg_fill=np.min(ref_img.data))
@@ -112,12 +123,30 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
     disp = hheight/s + height + radius
+        
     # disp = hheight
     # disp = 0
+    
+    timescale = kwargs.get('timescale', 109.8)
+    
+    timestep = subs_ds.current_time.value.item()
+    timediff = TimeDelta(timestep * timescale * u.s)
+    
+    start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
+    synth_obs_time = start_time + timediff
 
+<<<<<<< HEAD
     kwargs = {'obstime': ref_img.reference_coordinate.obstime,
+=======
+    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
+                  frame='heliographic_stonyhurst',
+                  observer='earth', obstime=synth_obs_time).transform_to(frame='helioprojective')
+    
+    print('obstime:', synth_obs_time)
+    map_kwargs = {'obstime': synth_obs_time,
+>>>>>>> f51fbcf014a504fc4ee19d1da065c8c9f74a87d0
             #   'reference_coord': fm,
-              'reference_coord': ref_img.reference_coordinate,
+              #'reference_coord': ref_img.reference_coordinate,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
             #   'scale': obs_scale,
               'scale': u.Quantity(ref_img.scale),
@@ -127,10 +156,12 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             #   'instrument': ref_img.instrument,
               'exposure': ref_img.exposure_time,
               'unit': ref_img.unit,
+              'wavelength': kwargs.get('wavelength', ref_img.wavelength),
+              'poisson': kwargs.get('poisson', False),
               }
 
     # Import scale from an AIA image:
-    synth_map = xrt_synthetic.make_synthetic_map(**kwargs)
+    synth_map = synth_imag.make_synthetic_map(**map_kwargs)
 
     if fig:
         if plot == 'comp':
@@ -171,7 +202,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
         return ax, synth_map
 
     else:
-        return synth_map
+        return synth_map, normvector, northvector
 
 def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: Quantity=0 * u.deg, phi0: Quantity=0 * u.deg, 
               el: Quantity=90 * u.deg, az: Quantity=0 * u.deg, samples_num: int=100, **kwargs):
@@ -204,16 +235,25 @@ def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: 
     DEFAULT_AZ = 0.0 * u.deg
 
     if 'pkl' in kwargs:
-        with open(kwargs.get('pkl'), 'rb') as f:
-            dims = pickle.load(f)
-            # print(f'Loop dimensions loaded:{dims}')
+        if isinstance(kwargs.get('pkl') , dict):
+            dims = kwargs.get('pkl')
             radius = dims['radius']
             height = dims['height']
             phi0 = dims['phi0']
             theta0 = dims['theta0']
             el = dims['el']
             az = dims['az']
-            f.close()
+        else:
+            with open(kwargs.get('pkl'), 'rb') as f:
+                dims = pickle.load(f)
+                # print(f'Loop dimensions loaded:{dims}')
+                radius = dims['radius']
+                height = dims['height']
+                phi0 = dims['phi0']
+                theta0 = dims['theta0']
+                el = dims['el']
+                az = dims['az']
+                f.close()
     else:
         # Set the loop parameters using the provided values or default values
         radius = kwargs.get('radius', DEFAULT_RADIUS)
@@ -414,7 +454,11 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
     shift_origin = kwargs.get("sh_ori", "ref")
     if shift_origin == 'fpt0':
         # Manually Selected Synthetic Footpoint (2012-07-19 Event)
-        fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
+        #fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
+        
+        # 2011 event
+        fpt_coord = SkyCoord(-265*u.arcsec, 283*u.arcsec, frame=ref_img.coordinate_frame)
+        
         fpt_pix = ref_img.wcs.world_to_pixel(fpt_coord)
 
         ori_pix = fpt_pix
