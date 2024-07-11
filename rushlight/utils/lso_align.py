@@ -135,16 +135,12 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
     synth_obs_time = start_time + timediff
 
-<<<<<<< HEAD
-    kwargs = {'obstime': ref_img.reference_coordinate.obstime,
-=======
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
                   frame='heliographic_stonyhurst',
                   observer='earth', obstime=synth_obs_time).transform_to(frame='helioprojective')
     
     print('obstime:', synth_obs_time)
     map_kwargs = {'obstime': synth_obs_time,
->>>>>>> f51fbcf014a504fc4ee19d1da065c8c9f74a87d0
             #   'reference_coord': fm,
               #'reference_coord': ref_img.reference_coordinate,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
