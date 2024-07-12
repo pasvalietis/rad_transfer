@@ -102,8 +102,9 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Dynamic synth plot settings
     synth_plot_settings = {'resolution': ref_img.data.shape[0],
-                           'vmin': 1e-15,
-                           'vmax': 8e1,
+                           'vmin': kwargs.get('vmin', 1.),
+                           'vmax': kwargs.get('vmax', 8.e2),
+                           'norm': colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)),
                            'cmap': 'inferno',
                            'logscale': True}
 
@@ -118,7 +119,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
                                 image_shift=[x, y],  # move the bottom center of the flare in [x,y]
-                                bkg_fill=np.min(ref_img.data))
+                                bkg_fill=kwargs.get('bkg_fill', 5.e-1)) #np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
@@ -140,6 +141,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
                   observer='earth', obstime=synth_obs_time).transform_to(frame='helioprojective')
     
     print('obstime:', synth_obs_time)
+    
     map_kwargs = {'obstime': synth_obs_time,
             #   'reference_coord': fm,
               #'reference_coord': ref_img.reference_coordinate,
@@ -168,7 +170,9 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
         elif plot == 'synth':
 
             # synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
-            synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
+            
+            
+            synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
             synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
             ax = fig.add_subplot(projection=synth_map)
             synth_map.plot(axes=ax)
