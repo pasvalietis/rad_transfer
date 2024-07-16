@@ -403,7 +403,7 @@ class SyntheticFilterImage():
             x = 0
             y = 0
 
-        self.image_shift = [x,y]
+        self.image_shift = (x,y)
 
     def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs): 
         if fig:
@@ -421,18 +421,16 @@ class SyntheticFilterImage():
                 # ax.autoscale(False)
                 self.synth_map.plot(axes=ax)
                 self.synth_map.draw_limb()
-                
-
             elif plot == 'obs':
                 ax = fig.add_subplot(projection=self.ref_img)
                 self.ref_img.plot(axes=ax)
             else:
                 ax = fig.add_subplot(projection=self.synth_map)
 
-            return ax, self.synth_map, self.normvector, self.northvector
+            return ax, self.synth_map, self.normvector, self.northvector, self.image_shift
 
         else:
-            return self.synth_map, self.normvector, self.northvector
+            return self.synth_map, self.normvector, self.northvector, self.image_shift
 
     def make_filter_image_field(self, **kwargs):
 
