@@ -8,6 +8,7 @@ import os
 import sys
 
 import yt
+from yt.utilities.orientation import Orientation
 from rushlight.utils.proj_imag import SyntheticFilterImage as synt_img
 from rushlight.config import config
 from rushlight.visualization.colormaps import color_tables
@@ -15,6 +16,7 @@ from rushlight.visualization.colormaps import color_tables
 sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 
+from unyt import unyt_array
 import astropy.units as u
 from astropy.units import Quantity
 from astropy.time import Time, TimeDelta
@@ -22,13 +24,13 @@ import astropy.constants as const
 
 import numpy as np
 import sunpy.map
+from scipy import ndimage #, datasets
 
 import pickle
 from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
 from sunpy.coordinates import Heliocentric
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-
 
 
 def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None, 
@@ -47,7 +49,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     :type plot: string, optional
     :raises Exception: NullReference
     :return: Tuple containing sunpy synthetic map and optionally matplotlib axes object
-    :rtype: tuple (sunpy.map.Map , matplotlib.pyplot.axes)
+    :rtype: tuple (sunpy.map.Map , matplotlib.pyplot.axes, normvector, northvector)
     """    
 
     # Retrieve reference image (ref_img)
@@ -83,10 +85,11 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
                              left_edge=kwargs.get('left_edge', left_edge),
                              right_edge=kwargs.get('right_edge', right_edge))
 
-    instr = ref_img.instrument.split(' ')[0].lower()
     # Instrument settings for synthetic image
+    instr = ref_img.instrument.split(' ')[0].lower()
     instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
     channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
+
     # Prepare cropped MHD data for imaging
     synth_imag = synt_img(cut_box, instr, channel)
 
@@ -114,13 +117,16 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
-    x, y = diff_roll(ref_img, lon, lat, **kwargs)
+    x, y = diff_roll(ref_img, lon, lat, normvector, northvector, subs_ds, **kwargs,)
 
+    zoom = kwargs.get('zoom', None)
+    bkg_fill = kwargs.get('bkg_fill', 5.e-1)
+    
     synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
-                                view_settings=synth_view_settings,
-                                image_shift=[x, y],  # move the bottom center of the flare in [x,y]
-                                bkg_fill=kwargs.get('bkg_fill', 5.e-1),
-                                image_zoom=kwargs.get('image_zoom', None)) #np.min(ref_img.data))
+                             view_settings=synth_view_settings,
+                             image_shift=[x, y],  # move the bottom center of the flare in [x,y]
+                             image_zoom=zoom,
+                             bkg_fill=bkg_fill) #np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
@@ -136,24 +142,16 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     
     start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
     synth_obs_time = start_time + timediff
-
-    fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
-                  frame='heliographic_stonyhurst',
-                  observer=ref_img.coordinate_frame.observer,
-                  obstime=synth_obs_time).transform_to(frame='helioprojective')
     
     print('obstime:', synth_obs_time)
     
     map_kwargs = {'obstime': synth_obs_time,
-            #'reference_coord': fm,
               'reference_coord': ref_img.reference_coordinate,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
-            #   'scale': obs_scale,
               'scale': u.Quantity(ref_img.scale),
               'telescope': ref_img.detector,
               'observatory': ref_img.observatory,
               'detector': ref_img.detector,
-            #   'instrument': ref_img.instrument,
               'exposure': ref_img.exposure_time,
               'unit': ref_img.unit,
               'wavelength': kwargs.get('wavelength', ref_img.wavelength),
@@ -162,8 +160,6 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Import scale from an AIA image:
     synth_map = synth_imag.make_synthetic_map(**map_kwargs)
-    
-    shift_origin = kwargs.get("sh_ori", None)
 
     if fig:
         if plot == 'comp':
@@ -172,44 +168,27 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             ax = fig.add_subplot(projection=comp.get_map(0))
             comp.plot(axes=ax)
         elif plot == 'synth':
-
-            # synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
-            
-            
-            synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
+            # synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
+            synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
             synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
             ax = fig.add_subplot(projection=synth_map)
             synth_map.plot(axes=ax)
             ax.grid(False)
             synth_map.draw_limb()
-
-            # coord=synth_map.reference_coordinate
-            # coord_img=ref_img.reference_coordinate
-            # ax.plot_coord(coord, 'o', color='r')
-            # ax.plot_coord(coord_img, 'o', color='b')
-
-            # Plotting key map points [debug purposes]
-            # pixels = synth_map.wcs.world_to_pixel(coord)
-            # pixels_img=ref_img.wcs.world_to_pixel(coord_img)
-            # center_image_pix = [synth_map.data.shape[0] / 2., synth_map.data.shape[1] / 2.] * u.pix
-            # ax.plot(pixels[0] * u.pix, pixels[1] * u.pix, 'x', color='w')
-
-            # ax.plot(pixels_img[0] * u.pix, pixels_img[1] * u.pix, 'x', color='w')
-            # ax.plot(center_image_pix[0], center_image_pix[1], 'x', color='g')
+            ax.autoscale(False)
 
         elif plot == 'obs':
             ax = fig.add_subplot(projection=ref_img)
             ref_img.plot(axes=ax)
         else:
             ax = fig.add_subplot(projection=synth_map)
+        
+        shift = (x,y)
+        return ax, synth_map, normvector, northvector, shift
 
-        return ax, synth_map
-    
-    elif shift_origin == 'fpt0':
-        shift = (x, y)
-        return synth_map, normvector, northvector, shift
     else:
-        return synth_map, normvector, northvector
+        shift = (x,y)
+        return synth_map, normvector, northvector, shift
 
 def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: Quantity=0 * u.deg, phi0: Quantity=0 * u.deg, 
               el: Quantity=90 * u.deg, az: Quantity=0 * u.deg, samples_num: int=100, **kwargs):
@@ -441,7 +420,57 @@ def get_trsfm(keyword: str=None):
 
     return trsfm
 
-def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
+def coord_projection(coord, dataset, orientation=None, **kwargs):
+    """
+    Reproduces yt plot_modifications _project_coords functionality
+    """
+    # coord_copy should be a unyt array in code_units
+    coord_copy = coord
+    coord_vectors = coord_copy.transpose() - (dataset.domain_center.v * dataset.domain_center.uq)
+
+    # orientation object is computed from norm and north vectors
+    if orientation:
+        unit_vectors = orientation.unit_vectors
+    else:
+        if 'norm_vector' in kwargs:
+            norm_vector = kwargs['norm_vector']
+            norm_vec = unyt_array(norm_vector) * dataset.domain_center.uq
+        if 'north_vector' in kwargs:
+            north_vector = kwargs['north_vector']
+            north_vec = unyt_array(north_vector) * dataset.domain_center.uq
+        if 'north_vector' and 'norm_vector' in kwargs:
+            orientation = Orientation(norm_vec, north_vector=north_vec)
+            unit_vectors = orientation.unit_vectors
+
+    # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
+    y = np.dot(coord_vectors, unit_vectors[1]) + dataset.domain_center.value[1]
+    x = np.dot(coord_vectors, unit_vectors[0])  # * dataset.domain_center.uq
+
+    ret_coord = (x, y) # (y, x)
+
+    return ret_coord
+
+def code_coords_to_arcsec(code_coord, ref_image):
+    """
+    assume x axis extents in code units are [-.5 to .5] and y axis is changing from 0 to 1.
+    """
+    # acquire x and y extents of the reference_image
+    # image center:
+    center_x = ref_image.center.Tx
+    center_y = ref_image.center.Ty
+
+    x_code_coord, y_code_coord = code_coord[0], code_coord[1]
+
+    resolution = ref_image.data.shape
+    scale = ref_image.scale
+
+    x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
+    y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
+
+    return SkyCoord(x_asec, y_asec, frame=ref_image.coordinate_frame) #(x_asec, y_asec)
+
+def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, north: list,
+              dataset, **kwargs):
     """Calculate amount to shift image by difference between observed foot midpoint
     and selected "shift origin"
 
@@ -451,56 +480,62 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
     :type lon: Quantity
     :param lat: Latitude coordinate for CLB foot midpoint (u.deg)
     :type lat: Quantity
+    :param norm: Normal LOS to the dataset 
+    :type norm: list
+    :param north: Vector directing camera rotation of projection
+    :type north: list
     :return: Displacement vector x, y
     :rtype: tuple (int , int)
     """
-    
-    # Calculate amount to shift image by
-    # Difference between foot midpoint and shift origin
 
-    shift_origin = kwargs.get("sh_ori", "ref")
-    if shift_origin == 'fpt0':
-        # Manually Selected Synthetic Footpoint (2012-07-19 Event)
-        #fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
-        
-        # 2011 event
-        #fpt_coord = SkyCoord(-265*u.arcsec, 283*u.arcsec, frame=ref_img.coordinate_frame)
-        
-        # 2012 event
-        fpt_coord = SkyCoord(850*u.arcsec, -200*u.arcsec, frame=ref_img.coordinate_frame)
-        
-        fpt_pix = ref_img.wcs.world_to_pixel(fpt_coord)
+    zoom = kwargs.get('zoom', None)
 
-        ori_pix = fpt_pix
+    # Synthetic Foot Midpoint (0,0,0 in code_units)
+    north_q = unyt_array(north, dataset.units.code_length)
+    norm_q = unyt_array(norm, dataset.units.code_length)
+
+    ds_orientation = Orientation(norm_q, north_vector=north_q)
+    synth_fpt_2d = coord_projection(unyt_array([0,0,0], dataset.units.code_length), 
+                                   dataset, orientation=ds_orientation)
+    synth_fpt_asec = code_coords_to_arcsec(synth_fpt_2d, ref_img)
+    ori_pix = ref_img.wcs.world_to_pixel(synth_fpt_asec)
+
+    if zoom and zoom < 1:
+        # Find coordinates of bottom corner of "zoom area"
+        if zoom >= 1:
+                raise ValueError("Scale parameter has to be lower than 1")
+        zoomed_img = ndimage.zoom(ref_img.data, zoom)  # scale<1
+        y, x = ref_img.data.shape
+        cropx = (zoomed_img.shape[0])
+        cropy = (zoomed_img.shape[1])
+        startx = (x - cropx) // 2
+        starty = (y - cropy) // 2
     else:
-        # Reference Pixel (Center of View)
-        ref = ref_img.reference_coordinate
-        ref_pix = ref_img.wcs.world_to_pixel(ref)
-        
-        ori_pix = ref_pix
+        startx = 0
+        starty = 0
+        zoom = 1
 
-
-    # Foot Midpoint
+    # Foot Midpoint from CLB
     mpt = SkyCoord(lon=lon, lat=lat, radius=const.R_sun,
                 frame='heliographic_stonyhurst',
-                observer=ref_img.coordinate_frame.observer,
-                obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
+                observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
     mpt_pix = ref_img.wcs.world_to_pixel(mpt)
 
-    
+    # Find difference between pixel positions
     x1 = float(mpt_pix[0])
     y1 = float(mpt_pix[1])
+    # Shift and scale the synthetic coords by zoom
+    x2 = float(ori_pix[0]*zoom + startx)
+    y2 = float(ori_pix[1]*zoom + starty)
 
-    x2 = float(ori_pix[0])
-    y2 = float(ori_pix[1])
+    x = int((x1-x2))
+    y = int((y1-y2))
 
-    x = int(x1-x2)
-    y = int(y1-y2)
-
+    # 'noroll' for debugging purposes
     if kwargs.get('noroll', False):
         x = 0
         y = 0
 
+    # Return shift amount
     return x, y
-
 
