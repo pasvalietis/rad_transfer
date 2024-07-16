@@ -136,22 +136,23 @@ class SyntheticFilterImage():
         # transpose synthetic image (swap axes for imshow)
         self.image = np.array(prji).T
 
-
-        self.image_zoom = kwargs.get('image_zoom', None)
-        if self.image_zoom:
-            self.image = self.zoom_out(self.image, self.image_zoom)
-
+        # Fill background
+        self.bkg_fill = kwargs.get('bkg_fill', None)
+        
         # return self.image
         self.image_shift = kwargs.get('image_shift', None)  # (xshift, yshift)
         if self.image_shift:
             self.image = np.roll(self.image, (self.image_shift[0],
                                               self.image_shift[1]), axis=(1, 0))
-
-        # Fill background
-        self.bkg_fill = kwargs.get('bkg_fill', None)
+        
+        
+        self.image_zoom = kwargs.get('image_zoom', None)
+        if self.image_zoom:
+            self.image = self.zoom_out(self.image, self.image_zoom, self.bkg_fill)
+            
         if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
 
-    def zoom_out(self, img, scale):
+    def zoom_out(self, img, scale, bkg_fill=None):
         new_arr = np.ones_like(img) * img.min()
         if scale >= 1:
             raise ValueError("Scale parameter has to be lower than 1")
@@ -164,6 +165,7 @@ class SyntheticFilterImage():
         startx = (x - cropx) // 2
         starty = (y - cropy) // 2
         new_arr[starty:starty + cropy, startx:startx + cropx] = zoomed_img
+        if bkg_fill: new_arr[new_arr <= 0] = bkg_fill
         return new_arr
 
     def make_synthetic_map(self, **kwargs):
@@ -173,6 +175,8 @@ class SyntheticFilterImage():
         :return:
         """
         data = self.image
+        
+        
         self.obstime = kwargs.get('obstime')
 
         # Define header parameters for the synthetic image
@@ -207,6 +211,10 @@ class SyntheticFilterImage():
         self.poisson = kwargs.get('poisson', None)
         if self.poisson:
             data = 0.5*np.max(self.image) * random_noise(self.image / (0.5*np.max(self.image)), mode='poisson')
+            
+        if self.bkg_fill: 
+            data[data <= 0] = self.bkg_fill
+            data[np.isnan(data)] = self.bkg_fill
         
         # Creating header using sunpy
         header = make_fitswcs_header(data,
