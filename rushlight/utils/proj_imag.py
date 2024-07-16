@@ -135,22 +135,23 @@ class SyntheticFilterImage():
 
         # transpose synthetic image (swap axes for imshow)
         self.image = np.array(prji).T
-
-        # Fill background
-        self.bkg_fill = kwargs.get('bkg_fill', None)
         
+        self.bkg_fill = kwargs.get('bkg_fill', None)
+        print('bkg_fill is', self.bkg_fill)
+        
+        self.image_zoom = kwargs.get('image_zoom', None)
+        if self.image_zoom:
+            self.image = self.zoom_out(self.image, self.image_zoom, self.bkg_fill)
+
         # return self.image
         self.image_shift = kwargs.get('image_shift', None)  # (xshift, yshift)
         if self.image_shift:
             self.image = np.roll(self.image, (self.image_shift[0],
                                               self.image_shift[1]), axis=(1, 0))
+
+        # Fill background
         
-        
-        self.image_zoom = kwargs.get('image_zoom', None)
-        if self.image_zoom:
-            self.image = self.zoom_out(self.image, self.image_zoom, self.bkg_fill)
-            
-        if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
+        if self.bkg_fill: self.image[self.image <= 0.] = self.bkg_fill
 
     def zoom_out(self, img, scale, bkg_fill=None):
         new_arr = np.ones_like(img) * img.min()
@@ -165,7 +166,8 @@ class SyntheticFilterImage():
         startx = (x - cropx) // 2
         starty = (y - cropy) // 2
         new_arr[starty:starty + cropy, startx:startx + cropx] = zoomed_img
-        if bkg_fill: new_arr[new_arr <= 0] = bkg_fill
+        if bkg_fill: new_arr[new_arr <= 0.] = bkg_fill
+        if bkg_fill: new_arr[np.isnan(new_arr)] = bkg_fill
         return new_arr
 
     def make_synthetic_map(self, **kwargs):
@@ -175,8 +177,6 @@ class SyntheticFilterImage():
         :return:
         """
         data = self.image
-        
-        
         self.obstime = kwargs.get('obstime')
 
         # Define header parameters for the synthetic image
