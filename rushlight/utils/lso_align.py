@@ -119,7 +119,8 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
                                 view_settings=synth_view_settings,
                                 image_shift=[x, y],  # move the bottom center of the flare in [x,y]
-                                bkg_fill=kwargs.get('bkg_fill', 5.e-1)) #np.min(ref_img.data))
+                                bkg_fill=kwargs.get('bkg_fill', 5.e-1),
+                                image_zoom=kwargs.get('image_zoom', None)) #np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
@@ -138,13 +139,14 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     fm = SkyCoord(lon=lon, lat=lat, radius=const.R_sun + disp,
                   frame='heliographic_stonyhurst',
-                  observer='earth', obstime=synth_obs_time).transform_to(frame='helioprojective')
+                  observer=ref_img.coordinate_frame.observer,
+                  obstime=synth_obs_time).transform_to(frame='helioprojective')
     
     print('obstime:', synth_obs_time)
     
     map_kwargs = {'obstime': synth_obs_time,
-            #   'reference_coord': fm,
-              #'reference_coord': ref_img.reference_coordinate,
+            #'reference_coord': fm,
+              'reference_coord': ref_img.reference_coordinate,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
             #   'scale': obs_scale,
               'scale': u.Quantity(ref_img.scale),
@@ -160,6 +162,8 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Import scale from an AIA image:
     synth_map = synth_imag.make_synthetic_map(**map_kwargs)
+    
+    shift_origin = kwargs.get("sh_ori", None)
 
     if fig:
         if plot == 'comp':
@@ -200,7 +204,10 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             ax = fig.add_subplot(projection=synth_map)
 
         return ax, synth_map
-
+    
+    elif shift_origin == 'fpt0':
+        shift = (x, y)
+        return synth_map, normvector, northvector, shift
     else:
         return synth_map, normvector, northvector
 
@@ -457,7 +464,10 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
         #fpt_coord = SkyCoord(630*u.arcsec, -250*u.arcsec, frame=ref_img.coordinate_frame)
         
         # 2011 event
-        fpt_coord = SkyCoord(-265*u.arcsec, 283*u.arcsec, frame=ref_img.coordinate_frame)
+        #fpt_coord = SkyCoord(-265*u.arcsec, 283*u.arcsec, frame=ref_img.coordinate_frame)
+        
+        # 2012 event
+        fpt_coord = SkyCoord(850*u.arcsec, -200*u.arcsec, frame=ref_img.coordinate_frame)
         
         fpt_pix = ref_img.wcs.world_to_pixel(fpt_coord)
 
@@ -473,7 +483,8 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, **kwargs):
     # Foot Midpoint
     mpt = SkyCoord(lon=lon, lat=lat, radius=const.R_sun,
                 frame='heliographic_stonyhurst',
-                observer='earth', obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
+                observer=ref_img.coordinate_frame.observer,
+                obstime=ref_img.reference_coordinate.obstime).transform_to(frame='helioprojective')
     mpt_pix = ref_img.wcs.world_to_pixel(mpt)
 
     
