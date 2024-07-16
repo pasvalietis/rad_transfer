@@ -117,11 +117,9 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
-    zoom = 0.5
-    x, y = diff_roll(ref_img, lon, lat, normvector, northvector, subs_ds, 
-                     zoom=zoom, 
-                     **kwargs,)
+    x, y = diff_roll(ref_img, lon, lat, normvector, northvector, subs_ds, **kwargs,)
 
+    zoom = kwargs.get('zoom', None)
     synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
                              view_settings=synth_view_settings,
                              image_shift=[x, y],  # move the bottom center of the flare in [x,y]
@@ -486,7 +484,7 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, 
     :rtype: tuple (int , int)
     """
 
-    zoom = kwargs.get('zoom', 1)
+    zoom = kwargs.get('zoom', None)
 
     # Synthetic Foot Midpoint (0,0,0 in code_units)
     north_q = unyt_array(north, dataset.units.code_length)
@@ -498,15 +496,20 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, 
     synth_fpt_asec = code_coords_to_arcsec(synth_fpt_2d, ref_img)
     ori_pix = ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
-    # Find coordinates of bottom corner of "zoom area"
-    if zoom >= 1:
-            raise ValueError("Scale parameter has to be lower than 1")
-    zoomed_img = ndimage.zoom(ref_img.data, zoom)  # scale<1
-    y, x = ref_img.data.shape
-    cropx = (zoomed_img.shape[0])
-    cropy = (zoomed_img.shape[1])
-    startx = (x - cropx) // 2
-    starty = (y - cropy) // 2
+    if zoom and zoom < 1:
+        # Find coordinates of bottom corner of "zoom area"
+        if zoom >= 1:
+                raise ValueError("Scale parameter has to be lower than 1")
+        zoomed_img = ndimage.zoom(ref_img.data, zoom)  # scale<1
+        y, x = ref_img.data.shape
+        cropx = (zoomed_img.shape[0])
+        cropy = (zoomed_img.shape[1])
+        startx = (x - cropx) // 2
+        starty = (y - cropy) // 2
+    else:
+        startx = 0
+        starty = 0
+        zoom = 1
 
     # Foot Midpoint from CLB
     mpt = SkyCoord(lon=lon, lat=lat, radius=const.R_sun,
