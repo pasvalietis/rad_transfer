@@ -24,6 +24,7 @@ import astropy.constants as const
 
 import numpy as np
 import sunpy.map
+from scipy import ndimage #, datasets
 
 import pickle
 from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
@@ -116,13 +117,16 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     synth_view_settings = {'normal_vector': normvector,  # Line of sight - changes 'orientation' of projection
                            'north_vector': northvector}  # rotates projection in xy
 
-
-    x, y = diff_roll(ref_img, lon, lat, normvector, northvector, subs_ds, ref_img, **kwargs)
+    zoom = 0.5
+    x, y = diff_roll(ref_img, lon, lat, normvector, northvector, subs_ds, 
+                     zoom=zoom, 
+                     **kwargs,)
 
     synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
-                                view_settings=synth_view_settings,
-                                image_shift=[x, y],  # move the bottom center of the flare in [x,y]
-                                bkg_fill=kwargs.get('bkg_fill', 5.e-1)) #np.min(ref_img.data))
+                             view_settings=synth_view_settings,
+                             image_shift=[x, y],  # move the bottom center of the flare in [x,y]
+                             image_zoom=zoom,
+                             bkg_fill=kwargs.get('bkg_fill', 5.e-1),) #np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
@@ -164,16 +168,14 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             ax = fig.add_subplot(projection=comp.get_map(0))
             comp.plot(axes=ax)
         elif plot == 'synth':
-
-            # synth_map.plot(axes=ax, vmin=1e-5, vmax=8e1, cmap='inferno')
-            
-            
-            synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
+            # synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
+            synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
             synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
             ax = fig.add_subplot(projection=synth_map)
             synth_map.plot(axes=ax)
             ax.grid(False)
             synth_map.draw_limb()
+            ax.autoscale(False)
 
         elif plot == 'obs':
             ax = fig.add_subplot(projection=ref_img)
@@ -466,7 +468,7 @@ def code_coords_to_arcsec(code_coord, ref_image):
     return SkyCoord(x_asec, y_asec, frame=ref_image.coordinate_frame) #(x_asec, y_asec)
 
 def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, north: list,
-              dataset, reference_image, **kwargs):
+              dataset, **kwargs):
     """Calculate amount to shift image by difference between observed foot midpoint
     and selected "shift origin"
 
@@ -484,6 +486,8 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, 
     :rtype: tuple (int , int)
     """
 
+    zoom = kwargs.get('zoom', 1)
+
     # Synthetic Foot Midpoint (0,0,0 in code_units)
     north_q = unyt_array(north, dataset.units.code_length)
     norm_q = unyt_array(norm, dataset.units.code_length)
@@ -491,8 +495,18 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, 
     ds_orientation = Orientation(norm_q, north_vector=north_q)
     synth_fpt_2d = coord_projection(unyt_array([0,0,0], dataset.units.code_length), 
                                    dataset, orientation=ds_orientation)
-    synth_fpt_asec = code_coords_to_arcsec(synth_fpt_2d, reference_image)
+    synth_fpt_asec = code_coords_to_arcsec(synth_fpt_2d, ref_img)
     ori_pix = ref_img.wcs.world_to_pixel(synth_fpt_asec)
+
+    # Find coordinates of bottom corner of "zoom area"
+    if zoom >= 1:
+            raise ValueError("Scale parameter has to be lower than 1")
+    zoomed_img = ndimage.zoom(ref_img.data, zoom)  # scale<1
+    y, x = ref_img.data.shape
+    cropx = (zoomed_img.shape[0])
+    cropy = (zoomed_img.shape[1])
+    startx = (x - cropx) // 2
+    starty = (y - cropy) // 2
 
     # Foot Midpoint from CLB
     mpt = SkyCoord(lon=lon, lat=lat, radius=const.R_sun,
@@ -503,12 +517,12 @@ def diff_roll(ref_img: sunpy.map.Map, lon: Quantity, lat: Quantity, norm: list, 
     # Find difference between pixel positions
     x1 = float(mpt_pix[0])
     y1 = float(mpt_pix[1])
+    # Shift and scale the synthetic coords by zoom
+    x2 = float(ori_pix[0]*zoom + startx)
+    y2 = float(ori_pix[1]*zoom + starty)
 
-    x2 = float(ori_pix[0])
-    y2 = float(ori_pix[1])
-
-    x = int(x1-x2)
-    y = int(y1-y2)
+    x = int((x1-x2))
+    y = int((y1-y2))
 
     # 'noroll' for debugging purposes
     if kwargs.get('noroll', False):
