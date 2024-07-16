@@ -180,11 +180,13 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             ref_img.plot(axes=ax)
         else:
             ax = fig.add_subplot(projection=synth_map)
-
-        return ax, synth_map, normvector, northvector
+        
+        shift = (x,y)
+        return ax, synth_map, normvector, northvector, shift
 
     else:
-        return synth_map, normvector, northvector
+        shift = (x,y)
+        return synth_map, normvector, northvector, shift
 
 def calc_vect(radius: Quantity=const.R_sun, height: Quantity=10 * u.Mm, theta0: Quantity=0 * u.deg, phi0: Quantity=0 * u.deg, 
               el: Quantity=90 * u.deg, az: Quantity=0 * u.deg, samples_num: int=100, **kwargs):
