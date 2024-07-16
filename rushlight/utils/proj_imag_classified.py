@@ -1,0 +1,667 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import numpy as np
+from scipy import ndimage #, datasets
+
+import yt
+from yt.utilities.orientation import Orientation
+
+from rushlight.config import config
+from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
+from rushlight.visualization.colormaps import color_tables
+
+from skimage.util import random_noise
+
+import astropy.units as u
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+
+import sunpy.map
+from sunpy.map.mapbase import GenericMap, SpatialPair
+from sunpy.coordinates import frames, Heliocentric
+from sunpy.map.header_helper import make_fitswcs_header
+from sunpy.coordinates.sun import _radius_from_angular_radius
+
+from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
+from astropy.units import Quantity
+from astropy.time import Time, TimeDelta
+import astropy.constants as const
+
+import pickle
+import textwrap
+sys.path.insert(1, config.CLB_PATH)
+from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
+from unyt import unyt_array
+
+def coord_projection(coord, dataset, orientation=None, **kwargs):
+    """
+    Reproduces yt plot_modifications _project_coords functionality
+    """
+    # coord_copy should be a unyt array in code_units
+    coord_copy = coord
+    coord_vectors = coord_copy.transpose() - (dataset.domain_center.v * dataset.domain_center.uq)
+
+    # orientation object is computed from norm and north vectors
+    if orientation:
+        unit_vectors = orientation.unit_vectors
+    else:
+        if 'norm_vector' in kwargs:
+            norm_vector = kwargs['norm_vector']
+            norm_vec = unyt_array(norm_vector) * dataset.domain_center.uq
+        if 'north_vector' in kwargs:
+            north_vector = kwargs['north_vector']
+            north_vec = unyt_array(north_vector) * dataset.domain_center.uq
+        if 'north_vector' and 'norm_vector' in kwargs:
+            orientation = Orientation(norm_vec, north_vector=north_vec)
+            unit_vectors = orientation.unit_vectors
+
+    # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
+    y = np.dot(coord_vectors, unit_vectors[1]) + dataset.domain_center.value[1]
+    x = np.dot(coord_vectors, unit_vectors[0])  # * dataset.domain_center.uq
+
+    ret_coord = (x, y) # (y, x)
+
+    return ret_coord
+
+def code_coords_to_arcsec(code_coord, ref_image):
+    """
+    assume x axis extents in code units are [-.5 to .5] and y axis is changing from 0 to 1.
+    """
+    # acquire x and y extents of the reference_image
+    # image center:
+    center_x = ref_image.center.Tx
+    center_y = ref_image.center.Ty
+
+    x_code_coord, y_code_coord = code_coord[0], code_coord[1]
+
+    resolution = ref_image.data.shape
+    scale = ref_image.scale
+
+    x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
+    y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
+
+    return SkyCoord(x_asec, y_asec, frame=ref_image.coordinate_frame) #(x_asec, y_asec)
+
+###############################################################
+
+class SyntheticFilterImage():
+
+    """
+    Load a yt readable dataset and plot synthetic image having given the instrument name and wavelength
+    """
+
+    def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None,
+                 hint=None, units_override=None, **kwargs):
+        """
+        :param dataset: Path of the downsampled dataset or a dataset itself
+        """
+
+        # Loop Parameters
+        self.radius = 10.0 * u.Mm
+        self.height = 0.0 * u.Mm
+        self.phi0 = 0.0 * u.deg
+        self.theta0 = 0.0 * u.deg
+        self.el = 90.0 * u.deg
+        self.az = 0.0 * u.deg
+        self.samples_num = 100
+        if 'pkl' in kwargs:
+            if isinstance(kwargs.get('pkl') , dict):
+                self.dims = kwargs.get('pkl')
+                self.radius = dims['radius']
+                self.height = dims['height']
+                self.phi0 = dims['phi0']
+                self.theta0 = dims['theta0']
+                self.el = dims['el']
+                self.az = dims['az']
+                self.samples_num = dims['samples_num']
+            else:
+                with open(kwargs.get('pkl'), 'rb') as f:
+                    dims = pickle.load(f)
+                    # print(f'Loop dimensions loaded:{dims}')
+                    self.radius = dims['radius']
+                    self.height = dims['height']
+                    self.phi0 = dims['phi0']
+                    self.theta0 = dims['theta0']
+                    self.el = dims['el']
+                    self.az = dims['az']
+                    self.samples_num = dims['samples_num']
+                    f.close()
+        else:
+            # Set the loop parameters using the provided values or default values
+            self.radius = kwargs.get('radius', self.radius)
+            self.height = kwargs.get('height', self.height)
+            self.phi0 = kwargs.get('phi0', self.phi0)
+            self.theta0 = kwargs.get('theta0', self.theta0)
+            self.el = kwargs.get('el', self.el)
+            self.az = kwargs.get('az', self.az)
+            self.samples_num = kwargs.get('samples_num', self.samples_num)
+        
+        self.lat = self.theta0
+        self.lon = self.phi0
+
+        # Reference Image
+        self.ref_img = None
+        # Retrieve reference image (ref_img)
+        try:
+            if smap:
+                self.ref_img = smap
+            else:
+                try:
+                    with open(smap_path, 'rb') as f:
+                        self.ref_img = pickle.load(f)
+                        f.close()
+                except:
+                    self.ref_img = sunpy.map.Map(smap_path)
+        except:
+            print("\n\nHandled Exception:\n")
+            raise Exception('Please provide either a map (xmap) or path to pickled map (xmap_path)')
+
+        # Header data
+        instr = self.ref_img.instrument.split(' ')[0].lower()
+        self.instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
+        self.channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
+        self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
+
+        self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
+        self.calc_vect(**kwargs)
+
+        self.view_settings = {'normal_vector': self.normvector,  # pass vectors as mutable arguments
+                              'north_vector': self.northvector}
+
+        # Load subsampled 3D MHD file
+        shen_datacube = config.SIMULATIONS['DATASET']
+        if isinstance(dataset, str):
+            downs_file_path = kwargs.get('datacube', shen_datacube)
+            self.data = yt.load(downs_file_path)
+        else:
+            self.data = dataset
+        
+        # Crop MHD file
+        center = [0.0, 0.5, 0.0]
+        left_edge = [-0.5, 0.016, -0.25]
+        right_edge = [0.5, 1.0, 0.25]
+
+        self.box = self.data.region(center=kwargs.get('center', center),
+                                left_edge=kwargs.get('left_edge', left_edge),
+                                right_edge=kwargs.get('right_edge', right_edge))
+        self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
+
+        # Observation time
+        self.timescale = kwargs.get('timescale', 109.8)
+        timestep = self.data.current_time.value.item()
+        timediff = TimeDelta(timestep * self.timescale * u.s)
+        start_time = Time(self.ref_img.reference_coordinate.obstime, scale='utc', format='isot')
+        self.synth_obs_time = start_time + timediff
+        print('obstime:', self.synth_obs_time)
+        self.obstime = kwargs.get('obstime', self.synth_obs_time)  # Observation time
+
+        self.zoom, self.image_shift = (None, None)
+        self.diff_roll(**kwargs)
+
+        self.plot_settings = {'resolution': self.ref_img.data.shape[0],
+                              'vmin': kwargs.get('vmin', 1e-15),
+                              'vmax': kwargs.get('vmax', 1e6),
+                              'norm': colors.LogNorm(kwargs.get('vmin', 1e-15), kwargs.get('vmax', 1e6)),
+                              'cmap': 'inferno',
+                              'logscale': True,
+                              'figpath': './prj_plt.png',
+                              'frame': None,
+                              'label': None}
+
+        self.__imag_field, self.image = (None, None)
+        self.proj_and_imag(**kwargs)
+
+        self.make_synthetic_map(**kwargs)
+        
+    def calc_vect(self, **kwargs):
+        """Calculates the north and normal vectors for the synthetic image
+
+        :param radius: radius of the CLB loop, defaults to const.R_sun
+        :type radius: Quantity, optional
+        :param height: height of the center of the CLB loop above solar surface, defaults to 10*u.Mm
+        :type height: Quantity, optional
+        :param theta0: longitude coordinate, defaults to 0*u.deg
+        :type theta0: Quantity, optional
+        :param phi0: latitude coordinate, defaults to 0*u.deg
+        :type phi0: Quantity, optional
+        :param el: angle of CLB loop relative to tangent plane of solar surface, defaults to 90*u.deg
+        :type el: Quantity, optional
+        :param az: rotation of CLB loop around vector normal to solar surface, defaults to 0*u.deg
+        :type az: Quantity, optional
+        :param samples_num: Number of points that make up the CLB loop, defaults to 100
+        :type samples_num: int, optional
+        :raises Exception: Null reference to kwargs member
+        :return: norm, north, lat, lon, radius, height, ifpd
+        :rtype: tuple (list, list, Quantity, Quantity, Quantity, Quantity, float)
+        """    
+
+        # Define the vectors v1 and v2 (from center of sun to footpoints)
+        try:
+            self.loop_coords = semi_circle_loop(self.radius, 0, 0, False, self.height, self.theta0, self.phi0, self.el, self.az, self.samples_num)[0].cartesian
+        except:
+            print("Error handled: Your CLB does not support semicircles \n")
+            self.loop_coords = semi_circle_loop(self.radius, self.height, self.theta0, self.phi0, self.el, self.az, self.samples_num)[0].cartesian
+
+        v1 = np.array([self.loop_coords[0].x.value, 
+                    self.loop_coords[0].y.value,
+                    self.loop_coords[0].z.value])
+        
+        v2 = np.array([self.loop_coords[-1].x.value, 
+                    self.loop_coords[-1].y.value,
+                    self.loop_coords[-1].z.value])
+        
+        v3 = np.array([self.loop_coords[int(self.loop_coords.shape[0]/2.)].x.value, 
+                    self.loop_coords[int(self.loop_coords.shape[0]/2.)].y.value,
+                    self.loop_coords[int(self.loop_coords.shape[0]/2.)].z.value])
+
+        # Inter-FootPoint distance
+        v_12 = v1-v2  # x-direction in mhd frame
+        self.ifpd = np.linalg.norm(v_12)
+
+        # vectors going from footpoint to top of loop
+        v1_loop = v3 - v1
+        v2_loop = v3 - v2
+
+        # Use the cross product to determine the orientation of the loop plane
+        cross_product = np.cross(v1_loop, v2_loop) # z-direction in mhd frame
+
+        # Normal Vector
+        norm0 = cross_product / np.linalg.norm(cross_product)
+
+        # Defining MHD base coordinate system
+        z_mhd = norm0
+        x_mhd = v_12 / np.linalg.norm(v_12)
+        zx_cross = np.cross(z_mhd, x_mhd)
+        y_mhd = zx_cross / np.linalg.norm(zx_cross)
+        
+        # Transformation matrix from stonyhurst to MHD coordinates
+
+        mhd_in_stonyh = np.column_stack((x_mhd, y_mhd, z_mhd))
+        stonyh_to_mhd = np.linalg.inv(mhd_in_stonyh)            
+
+        los_vector_obs = SkyCoord(CartesianRepresentation(0*u.Mm, 0*u.Mm, -1*u.Mm),
+                            obstime=self.ref_img.coordinate_frame.obstime,
+                            observer=self.ref_img.coordinate_frame.observer,
+                            frame="heliocentric")
+        
+        imag_rot_matrix = self.ref_img.rotation_matrix
+        
+        cam_default = np.array([0, 1])
+        cam_pt = np.dot(imag_rot_matrix, cam_default)  # camera pointing
+        
+        camera_north_obs = SkyCoord(CartesianRepresentation(cam_pt[0]*u.Mm, 
+                                                            cam_pt[1]*u.Mm, 
+                                                            0*u.Mm),
+                            obstime=self.ref_img.coordinate_frame.obstime,
+                            observer=self.ref_img.coordinate_frame.observer,
+                            frame="heliocentric")
+        
+        los_vector = los_vector_obs.transform_to('heliographic_stonyhurst')
+        camera_north = camera_north_obs.transform_to('heliographic_stonyhurst')
+
+        los_vector_cart = np.array([los_vector.cartesian.x.value,
+                                    los_vector.cartesian.y.value,
+                                    los_vector.cartesian.z.value])
+        
+        camera_north_cart = np.array([camera_north.cartesian.x.value,
+                                    camera_north.cartesian.y.value,
+                                    camera_north.cartesian.z.value])
+        
+        los_vec = los_vector_cart / np.linalg.norm(los_vector_cart)
+        camera_vec = camera_north_cart / np.linalg.norm(camera_north_cart)
+        
+        norm_vec = np.dot(stonyh_to_mhd, los_vec).T
+        norm_vec = norm_vec / np.linalg.norm(norm_vec)
+        
+        north_vec = np.dot(stonyh_to_mhd, camera_vec).T
+        north_vec = north_vec / np.linalg.norm(north_vec)
+
+        # Inverting y component of the north vector in the MHD reference frame
+        north_vec[1] = - north_vec[1]
+
+        print("\nNorm:")
+        print(norm_vec)
+        
+        # DEFAULT: CAMERA UP
+        default = False
+        if default:
+            north = [0, 1., 0] 
+            north_vec = np.array(north)
+        
+        print("North:")
+        print(north_vec)
+        print("\n")
+
+        self.northvector = north_vec
+        self.normvector = norm_vec
+
+    def diff_roll(self, **kwargs):
+        """Calculate amount to shift image by difference between observed foot midpoint
+        and selected "shift origin"
+
+        :param ref_img: Reference observed image for the synthetic map
+        :type ref_img: sunpy.map.Map
+        :param lon: Longitude coordinate for CLB foot midpoint (u.deg)
+        :type lon: Quantity
+        :param lat: Latitude coordinate for CLB foot midpoint (u.deg)
+        :type lat: Quantity
+        :param norm: Normal LOS to the dataset 
+        :type norm: list
+        :param north: Vector directing camera rotation of projection
+        :type north: list
+        :return: Displacement vector x, y
+        :rtype: tuple (int , int)
+        """
+
+        self.zoom = kwargs.get('zoom', None)
+
+        # Synthetic Foot Midpoint (0,0,0 in code_units)
+        north_q = unyt_array(self.northvector, self.data.units.code_length)
+        norm_q = unyt_array(self.normvector, self.data.units.code_length)
+
+        ds_orientation = Orientation(norm_q, north_vector=north_q)
+        synth_fpt_2d = coord_projection(unyt_array([0,0,0], self.data.units.code_length), 
+                                    self.data, orientation=ds_orientation)
+        synth_fpt_asec = code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
+        ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
+
+        if self.zoom and self.zoom < 1:
+            # Find coordinates of bottom corner of "zoom area"
+            if self.zoom >= 1:
+                    raise ValueError("Scale parameter has to be lower than 1")
+            zoomed_img = ndimage.zoom(self.ref_img.data, self.zoom)  # scale<1
+            y, x = self.ref_img.data.shape
+            cropx = (zoomed_img.shape[0])
+            cropy = (zoomed_img.shape[1])
+            startx = (x - cropx) // 2
+            starty = (y - cropy) // 2
+        else:
+            startx = 0
+            starty = 0
+            self.zoom = 1
+
+        # Foot Midpoint from CLB
+        mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
+                    frame='heliographic_stonyhurst',
+                    observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
+        mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
+
+        # Find difference between pixel positions
+        x1 = float(mpt_pix[0])
+        y1 = float(mpt_pix[1])
+        # Shift and scale the synthetic coords by zoom
+        x2 = float(ori_pix[0]*self.zoom + startx)
+        y2 = float(ori_pix[1]*self.zoom + starty)
+
+        x = int((x1-x2))
+        y = int((y1-y2))
+
+        # 'noroll' for debugging purposes
+        if kwargs.get('noroll', False):
+            x = 0
+            y = 0
+
+        self.image_shift = [x,y]
+
+    def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs): 
+        if fig:
+            if plot == 'comp':
+                comp = sunpy.map.Map(self.synth_map, self.ref_img, composite=True)
+                comp.set_alpha(0, 0.50)
+                ax = fig.add_subplot(projection=comp.get_map(0))
+                comp.plot(axes=ax)
+            elif plot == 'synth':
+                # self.synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
+                self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
+                self.synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
+                ax = fig.add_subplot(projection=self.synth_map)
+                ax.grid(False)
+                # ax.autoscale(False)
+                self.synth_map.plot(axes=ax)
+                self.synth_map.draw_limb()
+                
+
+            elif plot == 'obs':
+                ax = fig.add_subplot(projection=self.ref_img)
+                self.ref_img.plot(axes=ax)
+            else:
+                ax = fig.add_subplot(projection=self.synth_map)
+
+            return ax, self.synth_map, self.normvector, self.northvector
+
+        else:
+            return self.synth_map, self.normvector, self.northvector
+
+    def make_filter_image_field(self, **kwargs):
+
+        cmap = {}
+        imaging_model = None
+        instr_list = ['xrt', 'aia']
+
+        if self.instr not in instr_list:
+            raise ValueError("instr should be in the instrument list: ", instr_list)
+
+        if self.instr == 'xrt':
+            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            cmap['xrt'] = color_tables.xrt_color_table()
+        if self.instr == 'aia':
+            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            try:
+                cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
+            except ValueError:
+                raise ValueError("AIA wavelength should be one of the following:"
+                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+
+        imaging_model.make_intensity_fields(self.data)
+
+        field = str(self.instr) + '_filter_band'
+        self.__imag_field = field
+
+        if self.plot_settings:
+            self.plot_settings['cmap'] = cmap[self.instr]
+
+    def proj_and_imag(self, **kwargs):
+
+        self.make_filter_image_field()  # Create emission fields
+
+        prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+            self.box,
+            [0.0, 0.5, 0.0],  # center position in code units
+            normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
+            width=self.data.domain_width[0].value,  # width in code units
+            resolution=self.plot_settings['resolution'],  # image resolution
+            item=self.__imag_field,  # respective field that is being projected
+            north_vector=self.view_settings['north_vector'])
+
+        # transpose synthetic image (swap axes for imshow)
+        self.image = np.array(prji).T
+
+        if self.zoom:
+            self.image = self.zoom_out(self.image, self.zoom)
+
+        # return self.image
+        if self.image_shift:
+            self.image = np.roll(self.image, (self.image_shift[0],
+                                              self.image_shift[1]), axis=(1, 0))
+
+        # Fill background
+        self.bkg_fill = kwargs.get('bkg_fill', None)
+        if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
+
+    def zoom_out(self, img, scale):
+        new_arr = np.ones_like(img) * img.min()
+        if scale >= 1:
+            raise ValueError("Scale parameter has to be lower than 1")
+        zoomed_img = ndimage.zoom(img, scale)  # scale<1
+
+        # fill the central part of the new image
+        y, x = new_arr.shape
+        cropx = (zoomed_img.shape[0])
+        cropy = (zoomed_img.shape[1])
+        startx = (x - cropx) // 2
+        starty = (y - cropy) // 2
+        new_arr[starty:starty + cropy, startx:startx + cropx] = zoomed_img
+        return new_arr
+
+    def make_synthetic_map(self, **kwargs):
+
+        """
+        Creates a synthetic map object that can be loaded/edited with sunpy
+        :return:
+        """
+        data = self.image
+
+        # Define header parameters for the synthetic image
+
+        # Coordinates can be passed from sunpy maps that comparisons are made width
+        self.reference_coord = self.ref_img.reference_coordinate
+        self.reference_pixel = u.Quantity(self.ref_img.reference_pixel)
+
+        asec2cm = _radius_from_angular_radius(1. * u.arcsec, 1 * u.AU).to(u.cm)  # centimeters per arcsecond at 1 AU
+        resolution = self.plot_settings['resolution']
+        domain_size = self.domain_width.max()
+        len_asec = (domain_size/asec2cm).value
+        scale_ = [len_asec/resolution, len_asec/resolution]
+
+
+        self.scale = kwargs.get('scale', u.Quantity(self.ref_img.scale))
+        self.telescope = kwargs.get('telescope', self.ref_img.detector)
+        self.observatory = kwargs.get('observatory', self.ref_img.observatory)
+        self.detector = kwargs.get('detector', self.ref_img.detector)
+        self.instrument = kwargs.get('instrument', None)
+        self.wavelength = kwargs.get('wavelength', self.ref_img.wavelength)
+        self.exposure = kwargs.get('exposure', self.ref_img.exposure_time)
+        self.unit = kwargs.get('unit', self.ref_img.unit)
+        self.poisson = kwargs.get('poisson', None)
+
+        if self.poisson:
+            data = 0.5*np.max(self.image) * random_noise(self.image / (0.5*np.max(self.image)), mode='poisson')
+        
+        # Creating header using sunpy
+        header = make_fitswcs_header(data,
+                                     coordinate=self.reference_coord,
+                                     reference_pixel=self.reference_pixel,
+                                     scale=self.scale,
+                                     telescope=self.telescope,
+                                     detector=self.detector,
+                                     instrument=self.instrument,
+                                     observatory=self.observatory,
+                                     wavelength=self.wavelength,
+                                     exposure=self.exposure,
+                                     unit=self.unit)
+
+        self.synth_map = sunpy.map.Map(data, header)
+        return self.synth_map
+
+    def project_points(self, dataset=None, image=None):
+        """
+        Identify pixels where three dimensional points from the original dataset are projected
+        on the image plane
+        TODO: Add markers on the synthetic image object
+        :return: x, y -- pixels on which the point inside synthetic datacube projects to
+        """
+        if dataset is None:
+            dataset = self.data #self.region
+        if image is None:
+            image = self.image
+
+        # Create a dummy PlotMPL plot that will take data and coord system from the initial dataset
+
+        # Use yt function sanitize_coord_system to export x, y values of the point in the image plane
+
+    def __str__(self):
+        return f"{self._text_summary()}\n{self.data.__repr__()}"
+
+    def __repr__(self):
+        return f"{object.__repr__(self)}\n{self}"
+
+    def _text_summary(self):
+        # similarly to sunpy.map.mapbase GenericMap(NDData)
+        return textwrap.dedent("""\
+        Synthetic image from the yt dataset
+        ---------
+        Instrument:\t\t {inst}
+        Wavelength:\t\t {wave}
+        """).format(inst=self.instr,
+                    wave=self.channel)
+
+
+#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
+# so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
+# Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
+# IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
+# Or just inherit from SyntheticFilterImage (?)
+
+
+class SyntheticImage():
+
+    """
+    Template for a parent class for the Synthetic Images
+    """
+    # TODO: Should this be an abstract class? So that abstract methods can be explicitly defined in each of the
+    #  inheriting classes
+
+    def __init__(self):
+        pass
+
+
+class SyntheticBandImage():
+
+    """
+    Class to store synthetic X-ray images generated in a given *energy band*, such as ones from RHESSI.
+    """
+
+    def __init__(self, dataset, emin, emax, nbins, emission_model, hint=None, units_override=None,
+                 view_settings=None, plot_settings=None, **kwargs):
+
+        """
+        :param dataset: Path of the downsampled dataset or a dataset itself
+        :param emin: low energy limit in keV
+        :param emax: high energy limit in keV
+        :param nbins: number of energy bins to compute synthetic spectra and images
+        """
+
+        self.emin = emin
+        self.emax = emax
+        self.nbins = nbins
+        self.emission_model = emission_model  # Thermal / Non-thermal
+
+        self.box = None  # Importing a region within an initial dataset
+
+        if isinstance(dataset, str):
+            self.data = yt.load(dataset, units_override=units_override, hint=hint)
+        elif isinstance(dataset, yt.data_objects.static_output.Dataset):
+            self.data = dataset
+        elif isinstance(dataset, yt.data_objects.selection_objects.region.YTRegion):
+            self.data = dataset.ds
+            self.box = dataset
+
+        self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
+        self.instr = kwargs.get('instr', 'RHESSI')
+        self.binscale = kwargs.get('binscale', 'linear')
+        self.obstime = kwargs.get('obstime', '2017-09-10')  # Observation time
+
+        self.view_settings = {'normal_vector': (0.0, 0.0, 1.0),  # pass vectors as mutable arguments
+                              'north_vector': (-0.7, -0.3, 0.0)}
+        self.__imag_field = None
+        self.image = None
+
+        if self.box:
+            self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
+        else:
+            self.domain_width = self.data.domain_width.in_units("cm").to_astropy()  # convert unyt to astropy.units
+
+    def make_band_image_field(self, **kwargs):
+
+        cmap = {}
+        imaging_model = None
+
+        if self.emission_model == 'Thermal':
+            imaging_model = xray_bremsstrahlung.ThermalBremsstrahlungModel
+
+        imaging_model.make_intensity_fields(self.data)
+        field = 'xray_' + str(emin) + '_' + str(emax) + '_keV_band'
+        self.__imag_field = field
+
