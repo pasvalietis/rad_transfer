@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
 import sunpy.map
+from sunpy.map.map_factory import MapFactory
 from sunpy.map.mapbase import GenericMap, SpatialPair
 from sunpy.coordinates import frames, Heliocentric
 from sunpy.map.header_helper import make_fitswcs_header
@@ -36,8 +37,10 @@ from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, cir
 from unyt import unyt_array
 
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
 ###############################################################
+# Filter Images Classes
 
 @dataclass
 class SyntheticFilterImage():
@@ -632,21 +635,90 @@ class SyntheticFilterImage():
 # Or just inherit from SyntheticFilterImage (?)
 
 @dataclass
-class SyntheticImage():
-
+class SyntheticImage(ABC):
     """
-    Template for a parent class for the Synthetic Images
+    Parent class for the Synthetic Images
     """
-    # TODO: Should this be an abstract class? So that abstract methods can be explicitly defined in each of the
-    #  inheriting classes
 
-    def __init__(self):
+    def __init__(self, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+        self.set_loop_params()
+        self.set_reference_image()
+
         pass
 
+    def set_loop_params(self, **kwargs):
+
+        # Loop Parameters
+        self.radius = 10.0 * u.Mm
+        self.height = 0.0 * u.Mm
+        self.phi0 = 0.0 * u.deg
+        self.theta0 = 0.0 * u.deg
+        self.el = 90.0 * u.deg
+        self.az = 0.0 * u.deg
+        self.samples_num = 100
+
+        if 'pkl' in kwargs:
+            if isinstance(kwargs.get('pkl') , dict):
+                self.dims = kwargs.get('pkl')
+                self.radius = dims['radius']
+                self.height = dims['height']
+                self.phi0 = dims['phi0']
+                self.theta0 = dims['theta0']
+                self.el = dims['el']
+                self.az = dims['az']
+                self.samples_num = dims['samples_num']
+            else:
+                with open(kwargs.get('pkl'), 'rb') as f:
+                    dims = pickle.load(f)
+                    # print(f'Loop dimensions loaded:{dims}')
+                    self.radius = dims['radius']
+                    self.height = dims['height']
+                    self.phi0 = dims['phi0']
+                    self.theta0 = dims['theta0']
+                    self.el = dims['el']
+                    self.az = dims['az']
+                    self.samples_num = dims['samples_num']
+                    f.close()
+        else:
+            # Set the loop parameters using the provided values or default values
+            self.radius = kwargs.get('radius', self.radius)
+            self.height = kwargs.get('height', self.height)
+            self.phi0 = kwargs.get('phi0', self.phi0)
+            self.theta0 = kwargs.get('theta0', self.theta0)
+            self.el = kwargs.get('el', self.el)
+            self.az = kwargs.get('az', self.az)
+            self.samples_num = kwargs.get('samples_num', self.samples_num)
+        
+        self.lat = self.theta0
+        self.lon = self.phi0
+
+    def set_reference_image(self):
+        # Reference Image
+        self.ref_img = None
+
+        # Retrieve reference image (ref_img)
+        try:
+            if self.smap:
+                self.ref_img = smap
+            else:
+                try:
+                    with open(self.smap_path, 'rb') as f:
+                        self.ref_img = pickle.load(f)
+                        f.close()
+                except:
+                    self.ref_img = sunpy.map.Map(self.smap_path)
+        except:
+            print("\n\nHandled Exception:\n")
+            raise Exception('Please provide:', '\n a) A sunpy map object',
+            '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
+
 @dataclass
-class SyntheticFilterBandImage():
+class SyntheticFilterBandImage(SyntheticImage):
     """ For UV and Soft Xrays """
-    def __init__(self):
+    def __init__(self, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+        super().__init__(smap_path, smap, **kwargs)
+
+
         pass
 
 @dataclass
@@ -657,7 +729,7 @@ class SyntheticEnergyRangeImage():
 
 @dataclass
 class SyntheticInterferometricImage():
-    """ For radio """
+    """ For radio images """
     def __init__(self):
         pass
 
@@ -720,7 +792,23 @@ class SyntheticBandImage():
         field = 'xray_' + str(emin) + '_' + str(emax) + '_keV_band'
         self.__imag_field = field
 
+###############################################
+# Reference Image Classes
+
 @dataclass
-class ReferenceImage():
-    def __init__(self):
-        pass
+class ReferenceImage(ABC, MapFactory):
+
+    def __init__(self, ref_img_path):
+        return sunpy.map.Map(ref_img_path)
+
+@dataclass
+class XRTReferenceImage(ReferenceImage):
+
+    def __init__(self, ref_img_path):
+        super().__init__(ref_img_path)
+
+@dataclass
+class AIAReferenceImage(ReferenceImage):
+
+    def __init__(self, ref_img_path):
+        super().__init__(ref_img_path)
