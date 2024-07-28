@@ -42,11 +42,17 @@ from abc import ABC, abstractmethod
 ###############################################################
 # Filter Images Classes
 
+#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
+# so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
+# Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
+# IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
+# Or just inherit from SyntheticFilterImage (?)
+
 @dataclass
-class SyntheticFilterImage():
+class SyntheticImage(ABC):
 
     """
-    Load a yt readable dataset and plot synthetic image having given the instrument name and wavelength
+    Parent class for generating synthetic images
     """
 
     def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
@@ -61,65 +67,8 @@ class SyntheticFilterImage():
         :raises Exception: _description_
         """        
 
-        # Loop Parameters
-        self.radius = 10.0 * u.Mm
-        self.height = 0.0 * u.Mm
-        self.phi0 = 0.0 * u.deg
-        self.theta0 = 0.0 * u.deg
-        self.el = 90.0 * u.deg
-        self.az = 0.0 * u.deg
-        self.samples_num = 100
-        if 'pkl' in kwargs:
-            if isinstance(kwargs.get('pkl') , dict):
-                self.dims = kwargs.get('pkl')
-                self.radius = dims['radius']
-                self.height = dims['height']
-                self.phi0 = dims['phi0']
-                self.theta0 = dims['theta0']
-                self.el = dims['el']
-                self.az = dims['az']
-                self.samples_num = dims['samples_num']
-            else:
-                with open(kwargs.get('pkl'), 'rb') as f:
-                    dims = pickle.load(f)
-                    # print(f'Loop dimensions loaded:{dims}')
-                    self.radius = dims['radius']
-                    self.height = dims['height']
-                    self.phi0 = dims['phi0']
-                    self.theta0 = dims['theta0']
-                    self.el = dims['el']
-                    self.az = dims['az']
-                    self.samples_num = dims['samples_num']
-                    f.close()
-        else:
-            # Set the loop parameters using the provided values or default values
-            self.radius = kwargs.get('radius', self.radius)
-            self.height = kwargs.get('height', self.height)
-            self.phi0 = kwargs.get('phi0', self.phi0)
-            self.theta0 = kwargs.get('theta0', self.theta0)
-            self.el = kwargs.get('el', self.el)
-            self.az = kwargs.get('az', self.az)
-            self.samples_num = kwargs.get('samples_num', self.samples_num)
-        
-        self.lat = self.theta0
-        self.lon = self.phi0
-
-        # Reference Image
-        self.ref_img = None
-        # Retrieve reference image (ref_img)
-        try:
-            if smap:
-                self.ref_img = smap
-            else:
-                try:
-                    with open(smap_path, 'rb') as f:
-                        self.ref_img = pickle.load(f)
-                        f.close()
-                except:
-                    self.ref_img = sunpy.map.Map(smap_path)
-        except:
-            print("\n\nHandled Exception:\n")
-            raise Exception('Please provide either a map (xmap) or path to pickled map (xmap_path)')
+        self.set_loop_params(**kwargs)
+        self.set_reference_image(smap_path, smap)
 
         # Header data
         instr = self.ref_img.instrument.split(' ')[0].lower()
@@ -177,7 +126,73 @@ class SyntheticFilterImage():
         self.proj_and_imag(**kwargs)
 
         self.make_synthetic_map(**kwargs)
+    
+    def set_loop_params(self, **kwargs):
+
+        # Loop Parameters
+        self.radius = 10.0 * u.Mm
+        self.height = 0.0 * u.Mm
+        self.phi0 = 0.0 * u.deg
+        self.theta0 = 0.0 * u.deg
+        self.el = 90.0 * u.deg
+        self.az = 0.0 * u.deg
+        self.samples_num = 100
+
+        if 'pkl' in kwargs:
+            if isinstance(kwargs.get('pkl') , dict):
+                self.dims = kwargs.get('pkl')
+                self.radius = dims['radius']
+                self.height = dims['height']
+                self.phi0 = dims['phi0']
+                self.theta0 = dims['theta0']
+                self.el = dims['el']
+                self.az = dims['az']
+                self.samples_num = dims['samples_num']
+            else:
+                with open(kwargs.get('pkl'), 'rb') as f:
+                    dims = pickle.load(f)
+                    # print(f'Loop dimensions loaded:{dims}')
+                    self.radius = dims['radius']
+                    self.height = dims['height']
+                    self.phi0 = dims['phi0']
+                    self.theta0 = dims['theta0']
+                    self.el = dims['el']
+                    self.az = dims['az']
+                    self.samples_num = dims['samples_num']
+                    f.close()
+        else:
+            # Set the loop parameters using the provided values or default values
+            self.radius = kwargs.get('radius', self.radius)
+            self.height = kwargs.get('height', self.height)
+            self.phi0 = kwargs.get('phi0', self.phi0)
+            self.theta0 = kwargs.get('theta0', self.theta0)
+            self.el = kwargs.get('el', self.el)
+            self.az = kwargs.get('az', self.az)
+            self.samples_num = kwargs.get('samples_num', self.samples_num)
         
+        self.lat = self.theta0
+        self.lon = self.phi0
+
+    def set_reference_image(self, smap_path: str=None, smap: sunpy.map.Map=None):
+        # Reference Image
+        self.ref_img = None
+
+        # Retrieve reference image (ref_img)
+        try:
+            if smap:
+                self.ref_img = smap
+            else:
+                try:
+                    with open(smap_path, 'rb') as f:
+                        self.ref_img = pickle.load(f)
+                        f.close()
+                except:
+                    self.ref_img = sunpy.map.Map(self.smap_path)
+        except:
+            print("\n\nHandled Exception:\n")
+            raise Exception('Please provide:', '\n a) A sunpy map object',
+            '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
+
     def calc_vect(self, **kwargs):
         """Calculates the north and normal vectors for the synthetic image
 
@@ -627,115 +642,25 @@ class SyntheticFilterImage():
         """).format(inst=self.instr,
                     wave=self.channel)
 
-
-#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
-# so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
-# Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
-# IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
-# Or just inherit from SyntheticFilterImage (?)
-
 @dataclass
-class SyntheticImage(ABC):
-    """
-    Parent class for the Synthetic Images
-    """
-
-    def __init__(self, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
-        self.set_loop_params()
-        self.set_reference_image()
-
-        pass
-
-    def set_loop_params(self, **kwargs):
-
-        # Loop Parameters
-        self.radius = 10.0 * u.Mm
-        self.height = 0.0 * u.Mm
-        self.phi0 = 0.0 * u.deg
-        self.theta0 = 0.0 * u.deg
-        self.el = 90.0 * u.deg
-        self.az = 0.0 * u.deg
-        self.samples_num = 100
-
-        if 'pkl' in kwargs:
-            if isinstance(kwargs.get('pkl') , dict):
-                self.dims = kwargs.get('pkl')
-                self.radius = dims['radius']
-                self.height = dims['height']
-                self.phi0 = dims['phi0']
-                self.theta0 = dims['theta0']
-                self.el = dims['el']
-                self.az = dims['az']
-                self.samples_num = dims['samples_num']
-            else:
-                with open(kwargs.get('pkl'), 'rb') as f:
-                    dims = pickle.load(f)
-                    # print(f'Loop dimensions loaded:{dims}')
-                    self.radius = dims['radius']
-                    self.height = dims['height']
-                    self.phi0 = dims['phi0']
-                    self.theta0 = dims['theta0']
-                    self.el = dims['el']
-                    self.az = dims['az']
-                    self.samples_num = dims['samples_num']
-                    f.close()
-        else:
-            # Set the loop parameters using the provided values or default values
-            self.radius = kwargs.get('radius', self.radius)
-            self.height = kwargs.get('height', self.height)
-            self.phi0 = kwargs.get('phi0', self.phi0)
-            self.theta0 = kwargs.get('theta0', self.theta0)
-            self.el = kwargs.get('el', self.el)
-            self.az = kwargs.get('az', self.az)
-            self.samples_num = kwargs.get('samples_num', self.samples_num)
-        
-        self.lat = self.theta0
-        self.lon = self.phi0
-
-    def set_reference_image(self):
-        # Reference Image
-        self.ref_img = None
-
-        # Retrieve reference image (ref_img)
-        try:
-            if self.smap:
-                self.ref_img = smap
-            else:
-                try:
-                    with open(self.smap_path, 'rb') as f:
-                        self.ref_img = pickle.load(f)
-                        f.close()
-                except:
-                    self.ref_img = sunpy.map.Map(self.smap_path)
-        except:
-            print("\n\nHandled Exception:\n")
-            raise Exception('Please provide:', '\n a) A sunpy map object',
-            '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
-
-@dataclass
-class SyntheticFilterBandImage(SyntheticImage):
+class SyntheticFilterImage(SyntheticImage):
     """ For UV and Soft Xrays """
-    def __init__(self, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
-        super().__init__(smap_path, smap, **kwargs)
+    def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+        super().__init__(dataset, smap_path, smap, **kwargs)
 
-
-        pass
 
 @dataclass
-class SyntheticEnergyRangeImage():
+class SyntheticEnergyRangeImage(SyntheticImage):
     """ For Non-thermal emission, like PyXsim """
-    def __init__(self):
-        pass
+    pass
 
 @dataclass
-class SyntheticInterferometricImage():
-    """ For radio images """
-    def __init__(self):
-        pass
+class SyntheticInterferometricImage(SyntheticImage):
+    """ For Radio images (CASA)"""
+    pass
 
 @dataclass
 class SyntheticBandImage():
-
     """
     Class to store synthetic X-ray images generated in a given *energy band*, such as ones from RHESSI.
     """
@@ -798,14 +723,48 @@ class SyntheticBandImage():
 @dataclass
 class ReferenceImage(ABC, MapFactory):
 
-    def __init__(self, ref_img_path):
-        return sunpy.map.Map(ref_img_path)
+    def __init__(self, ref_img_path: str = None, **kwargs):
+        reference_image = None
+
+        if ref_img_path:
+            m = sunpy.map.Map(ref_img_path) 
+        else:
+            # Create an empty dataset
+            resolution = 1000
+            data = np.full((resolution, resolution), np.random.randint(100))
+            obstime = '2000-00-00T00:00:00'
+            # Define a reference coordinate and create a header using sunpy.map.make_fitswcs_header
+            skycoord = SkyCoord(0*u.arcsec, 0*u.arcsec, obstime=obstime,
+                                observer='earth', frame=frames.Helioprojective)
+            # Scale set to the following for solar limb to be in the field of view
+            scale = 220 # Changes bounds of the resulting helioprojective view
+            
+            instr = kwargs.get('instrument')
+            header_kwargs = {
+                'scale': [scale, scale]*u.arcsec/u.pixel,
+                'telescope': instr,
+                'detector': instr,
+                'instrument': instr,
+                'observatory': instr,
+                'exposure': 0.01 * u.s,
+                'unit': u.Mm
+            }
+
+            header = make_fitswcs_header(data, skycoord, **header_kwargs)
+            
+            default_kwargs = {'data': data, 'header': header}
+
+            m = sunpy.map.Map(data, header)        
+
+        self.map = m
 
 @dataclass
 class XRTReferenceImage(ReferenceImage):
 
-    def __init__(self, ref_img_path):
-        super().__init__(ref_img_path)
+    def __init__(self, ref_img_path: str = None):
+        
+
+        super().__init__(ref_img_path, instrument='Xrt')
 
 @dataclass
 class AIAReferenceImage(ReferenceImage):
