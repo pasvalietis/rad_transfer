@@ -35,10 +35,19 @@ sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 from unyt import unyt_array
 
-def coord_projection(coord, dataset, orientation=None, **kwargs):
-    """
-    Reproduces yt plot_modifications _project_coords functionality
-    """
+def coord_projection(coord: unyt_array, dataset, orientation: Orientation=None, **kwargs):
+    """Reproduces yt plot_modifications _project_coords functionality
+
+    :param coord: Coordinates of the point in the datacube domain
+    :type coord: unyt_array
+    :param dataset: loaded yt object of the target dataset
+    :type dataset: yt object
+    :param orientation: Orientation object calculated from norm / north vector, defaults to None
+    :type orientation: Orientation, optional
+    :return: _description_
+    :rtype: _type_
+    """     
+
     # coord_copy should be a unyt array in code_units
     coord_copy = coord
     coord_vectors = coord_copy.transpose() - (dataset.domain_center.v * dataset.domain_center.uq)
@@ -65,10 +74,19 @@ def coord_projection(coord, dataset, orientation=None, **kwargs):
 
     return ret_coord
 
-def code_coords_to_arcsec(code_coord, ref_image):
-    """
-    assume x axis extents in code units are [-.5 to .5] and y axis is changing from 0 to 1.
-    """
+def code_coords_to_arcsec(code_coord: unyt_array, ref_image: sunpy.map.Map):
+    """Converts coordinates in simulated datcube into arcsecond coordinates from the 
+    reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
+    and y axis is changing from 0 to 1.
+
+    :param code_coord: 
+    :type code_coord: unyt_array
+    :param ref_image: Reference image map
+    :type ref_image: sunpy.map.Map
+    :return: Arcsecond coordinates in observer's frame of reference
+    :rtype: SkyCoord
+    """    
+
     # acquire x and y extents of the reference_image
     # image center:
     center_x = ref_image.center.Tx
@@ -92,11 +110,17 @@ class SyntheticFilterImage():
     Load a yt readable dataset and plot synthetic image having given the instrument name and wavelength
     """
 
-    def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None,
-                 hint=None, units_override=None, **kwargs):
-        """
-        :param dataset: Path of the downsampled dataset or a dataset itself
-        """
+    def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+        """Object to contain all of the elements of the synthetic image and simulated flare
+
+        :param dataset: Either PATH to the local simulated dataset or a loaded yt object
+        :type dataset: _string, yt dataset
+        :param smap_path: PATH to the local reference map, defaults to None
+        :type smap_path: str, optional
+        :param smap: Sunpy map object of the reference map, defaults to None
+        :type smap: sunpy.map.Map, optional
+        :raises Exception: _description_
+        """        
 
         # Loop Parameters
         self.radius = 10.0 * u.Mm
@@ -218,20 +242,6 @@ class SyntheticFilterImage():
     def calc_vect(self, **kwargs):
         """Calculates the north and normal vectors for the synthetic image
 
-        :param radius: radius of the CLB loop, defaults to const.R_sun
-        :type radius: Quantity, optional
-        :param height: height of the center of the CLB loop above solar surface, defaults to 10*u.Mm
-        :type height: Quantity, optional
-        :param theta0: longitude coordinate, defaults to 0*u.deg
-        :type theta0: Quantity, optional
-        :param phi0: latitude coordinate, defaults to 0*u.deg
-        :type phi0: Quantity, optional
-        :param el: angle of CLB loop relative to tangent plane of solar surface, defaults to 90*u.deg
-        :type el: Quantity, optional
-        :param az: rotation of CLB loop around vector normal to solar surface, defaults to 0*u.deg
-        :type az: Quantity, optional
-        :param samples_num: Number of points that make up the CLB loop, defaults to 100
-        :type samples_num: int, optional
         :raises Exception: Null reference to kwargs member
         :return: norm, north, lat, lon, radius, height, ifpd
         :rtype: tuple (list, list, Quantity, Quantity, Quantity, Quantity, float)
@@ -341,16 +351,6 @@ class SyntheticFilterImage():
         """Calculate amount to shift image by difference between observed foot midpoint
         and selected "shift origin"
 
-        :param ref_img: Reference observed image for the synthetic map
-        :type ref_img: sunpy.map.Map
-        :param lon: Longitude coordinate for CLB foot midpoint (u.deg)
-        :type lon: Quantity
-        :param lat: Latitude coordinate for CLB foot midpoint (u.deg)
-        :type lat: Quantity
-        :param norm: Normal LOS to the dataset 
-        :type norm: list
-        :param north: Vector directing camera rotation of projection
-        :type north: list
         :return: Displacement vector x, y
         :rtype: tuple (int , int)
         """
@@ -406,6 +406,16 @@ class SyntheticFilterImage():
         self.image_shift = (x,y)
 
     def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs): 
+        """Plot the generated synthetic map in different configurations
+
+        :param fig: matplotlib figure object, defaults to None
+        :type fig: plt.figure, optional
+        :param plot: Hint for what type of plot to produce ['comp', 'synth', 'obs'], defaults to None
+        :type plot: str, optional
+        :return: Synthetic map object, normvector, northvector, and image shift
+        :rtype: tuple
+        """
+
         if fig:
             if plot == 'comp':
                 comp = sunpy.map.Map(self.synth_map, self.ref_img, composite=True)
@@ -415,7 +425,10 @@ class SyntheticFilterImage():
             elif plot == 'synth':
                 # self.synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
                 self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
-                self.synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
+                # self.synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
+                # self.synth_map.plot_settings['norm'] = self.plot_settings['norm']
+                self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
+                
                 ax = fig.add_subplot(projection=self.synth_map)
                 ax.grid(False)
                 # ax.autoscale(False)
@@ -433,6 +446,11 @@ class SyntheticFilterImage():
             return self.synth_map, self.normvector, self.northvector, self.image_shift
 
     def make_filter_image_field(self, **kwargs):
+        """_summary_
+
+        :raises ValueError: _description_
+        :raises ValueError: _description_
+        """
 
         cmap = {}
         imaging_model = None
@@ -461,6 +479,8 @@ class SyntheticFilterImage():
             self.plot_settings['cmap'] = cmap[self.instr]
 
     def proj_and_imag(self, **kwargs):
+        """_summary_
+        """
 
         self.make_filter_image_field()  # Create emission fields
 
@@ -489,6 +509,17 @@ class SyntheticFilterImage():
         if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
 
     def zoom_out(self, img, scale):
+        """Move the virtual observer away from from the projected dataset
+
+        :param img: _description_
+        :type img: _type_
+        :param scale: _description_
+        :type scale: _type_
+        :raises ValueError: _description_
+        :return: _description_
+        :rtype: _type_
+        """
+
         new_arr = np.ones_like(img) * img.min()
         if scale >= 1:
             raise ValueError("Scale parameter has to be lower than 1")
@@ -504,11 +535,11 @@ class SyntheticFilterImage():
         return new_arr
 
     def make_synthetic_map(self, **kwargs):
-
         """
         Creates a synthetic map object that can be loaded/edited with sunpy
         :return:
         """
+
         data = self.image
 
         # Define header parameters for the synthetic image
@@ -522,7 +553,6 @@ class SyntheticFilterImage():
         domain_size = self.domain_width.max()
         len_asec = (domain_size/asec2cm).value
         scale_ = [len_asec/resolution, len_asec/resolution]
-
 
         self.scale = kwargs.get('scale', u.Quantity(self.ref_img.scale))
         self.telescope = kwargs.get('telescope', self.ref_img.detector)
@@ -551,15 +581,24 @@ class SyntheticFilterImage():
                                      unit=self.unit)
 
         self.synth_map = sunpy.map.Map(data, header)
+
         return self.synth_map
 
     def project_points(self, dataset=None, image=None):
-        """
-        Identify pixels where three dimensional points from the original dataset are projected
+        """Identify pixels where three dimensional points from the original dataset are projected
         on the image plane
         TODO: Add markers on the synthetic image object
+
+        :param dataset: _description_, defaults to None
+        :type dataset: _type_, optional
+        :param image: _description_, defaults to None
+        :type image: _type_, optional
+        """        
+
+        """
         :return: x, y -- pixels on which the point inside synthetic datacube projects to
         """
+
         if dataset is None:
             dataset = self.data #self.region
         if image is None:
