@@ -35,75 +35,11 @@ sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 from unyt import unyt_array
 
-def coord_projection(coord: unyt_array, dataset, orientation: Orientation=None, **kwargs):
-    """Reproduces yt plot_modifications _project_coords functionality
-
-    :param coord: Coordinates of the point in the datacube domain
-    :type coord: unyt_array
-    :param dataset: loaded yt object of the target dataset
-    :type dataset: yt object
-    :param orientation: Orientation object calculated from norm / north vector, defaults to None
-    :type orientation: Orientation, optional
-    :return: _description_
-    :rtype: _type_
-    """     
-
-    # coord_copy should be a unyt array in code_units
-    coord_copy = coord
-    coord_vectors = coord_copy.transpose() - (dataset.domain_center.v * dataset.domain_center.uq)
-
-    # orientation object is computed from norm and north vectors
-    if orientation:
-        unit_vectors = orientation.unit_vectors
-    else:
-        if 'norm_vector' in kwargs:
-            norm_vector = kwargs['norm_vector']
-            norm_vec = unyt_array(norm_vector) * dataset.domain_center.uq
-        if 'north_vector' in kwargs:
-            north_vector = kwargs['north_vector']
-            north_vec = unyt_array(north_vector) * dataset.domain_center.uq
-        if 'north_vector' and 'norm_vector' in kwargs:
-            orientation = Orientation(norm_vec, north_vector=north_vec)
-            unit_vectors = orientation.unit_vectors
-
-    # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
-    y = np.dot(coord_vectors, unit_vectors[1]) + dataset.domain_center.value[1]
-    x = np.dot(coord_vectors, unit_vectors[0])  # * dataset.domain_center.uq
-
-    ret_coord = (x, y) # (y, x)
-
-    return ret_coord
-
-def code_coords_to_arcsec(code_coord: unyt_array, ref_image: sunpy.map.Map):
-    """Converts coordinates in simulated datcube into arcsecond coordinates from the 
-    reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
-    and y axis is changing from 0 to 1.
-
-    :param code_coord: 
-    :type code_coord: unyt_array
-    :param ref_image: Reference image map
-    :type ref_image: sunpy.map.Map
-    :return: Arcsecond coordinates in observer's frame of reference
-    :rtype: SkyCoord
-    """    
-
-    # acquire x and y extents of the reference_image
-    # image center:
-    center_x = ref_image.center.Tx
-    center_y = ref_image.center.Ty
-
-    x_code_coord, y_code_coord = code_coord[0], code_coord[1]
-
-    resolution = ref_image.data.shape
-    scale = ref_image.scale
-
-    x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
-    y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
-
-    return SkyCoord(x_asec, y_asec, frame=ref_image.coordinate_frame) #(x_asec, y_asec)
+from dataclasses import dataclass
 
 ###############################################################
 
+@dataclass
 class SyntheticFilterImage():
 
     """
@@ -362,9 +298,9 @@ class SyntheticFilterImage():
         norm_q = unyt_array(self.normvector, self.data.units.code_length)
 
         ds_orientation = Orientation(norm_q, north_vector=north_q)
-        synth_fpt_2d = coord_projection(unyt_array([0,0,0], self.data.units.code_length), 
-                                    self.data, orientation=ds_orientation)
-        synth_fpt_asec = code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
+        synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
+        synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
+        synth_fpt_asec = self.code_coords_to_arcsec(synth_fpt_2d)
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
@@ -585,6 +521,7 @@ class SyntheticFilterImage():
         return self.synth_map
 
     def project_points(self, dataset=None, image=None):
+        
         """Identify pixels where three dimensional points from the original dataset are projected
         on the image plane
         TODO: Add markers on the synthetic image object
@@ -607,6 +544,69 @@ class SyntheticFilterImage():
         # Create a dummy PlotMPL plot that will take data and coord system from the initial dataset
 
         # Use yt function sanitize_coord_system to export x, y values of the point in the image plane
+
+    def coord_projection(self, coord: unyt_array, orientation: Orientation=None, **kwargs):
+        """Reproduces yt plot_modifications _project_coords functionality
+
+        :param coord: Coordinates of the point in the datacube domain
+        :type coord: unyt_array
+        :param orientation: Orientation object calculated from norm / north vector, defaults to None
+        :type orientation: Orientation, optional
+        :return: _description_
+        :rtype: _type_
+        """     
+
+        # coord_copy should be a unyt array in code_units
+        coord_copy = coord
+        coord_vectors = coord_copy.transpose() - (self.data.domain_center.v * self.data.domain_center.uq)
+
+        # orientation object is computed from norm and north vectors
+        if orientation:
+            unit_vectors = orientation.unit_vectors
+        else:
+            if 'norm_vector' in kwargs:
+                norm_vector = kwargs['norm_vector']
+                norm_vec = unyt_array(norm_vector) * self.data.domain_center.uq
+            if 'north_vector' in kwargs:
+                north_vector = kwargs['north_vector']
+                north_vec = unyt_array(north_vector) * self.data.domain_center.uq
+            if 'north_vector' and 'norm_vector' in kwargs:
+                orientation = Orientation(norm_vec, north_vector=north_vec)
+                unit_vectors = orientation.unit_vectors
+
+        # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
+        y = np.dot(coord_vectors, unit_vectors[1]) + self.data.domain_center.value[1]
+        x = np.dot(coord_vectors, unit_vectors[0])  # * self.data.domain_center.uq
+
+        ret_coord = (x, y) # (y, x)
+
+        return ret_coord
+
+    def code_coords_to_arcsec(self, code_coord: unyt_array):
+        """Converts coordinates in simulated datcube into arcsecond coordinates from the 
+        reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
+        and y axis is changing from 0 to 1.
+
+        :param code_coord: 
+        :type code_coord: unyt_array
+        :return: Arcsecond coordinates in observer's frame of reference
+        :rtype: SkyCoord
+        """    
+
+        # acquire x and y extents of the reference_image
+        # image center:
+        center_x = self.ref_img.center.Tx
+        center_y = self.ref_img.center.Ty
+
+        x_code_coord, y_code_coord = code_coord[0], code_coord[1]
+
+        resolution = self.ref_img.data.shape
+        scale = self.ref_img.scale
+
+        x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
+        y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
+
+        return SkyCoord(x_asec, y_asec, frame=self.ref_img.coordinate_frame) #(x_asec, y_asec)
 
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
@@ -631,7 +631,7 @@ class SyntheticFilterImage():
 # IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
 # Or just inherit from SyntheticFilterImage (?)
 
-
+@dataclass
 class SyntheticImage():
 
     """
@@ -643,7 +643,25 @@ class SyntheticImage():
     def __init__(self):
         pass
 
+@dataclass
+class SyntheticFilterBandImage():
+    """ For UV and Soft Xrays """
+    def __init__(self):
+        pass
 
+@dataclass
+class SyntheticEnergyRangeImage():
+    """ For Non-thermal emission, like PyXsim """
+    def __init__(self):
+        pass
+
+@dataclass
+class SyntheticInterferometricImage():
+    """ For radio """
+    def __init__(self):
+        pass
+
+@dataclass
 class SyntheticBandImage():
 
     """
@@ -702,3 +720,7 @@ class SyntheticBandImage():
         field = 'xray_' + str(emin) + '_' + str(emax) + '_keV_band'
         self.__imag_field = field
 
+@dataclass
+class ReferenceImage():
+    def __init__(self):
+        pass
