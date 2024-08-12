@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import os
-import sys
 import numpy as np
 from scipy import ndimage #, datasets
 
@@ -32,6 +30,7 @@ import astropy.constants as const
 
 import pickle
 import textwrap
+import sys
 sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
 from unyt import unyt_array
@@ -648,7 +647,6 @@ class SyntheticFilterImage(SyntheticImage):
     def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
         super().__init__(dataset, smap_path, smap, **kwargs)
 
-
 @dataclass
 class SyntheticEnergyRangeImage(SyntheticImage):
     """ For Non-thermal emission, like PyXsim """
@@ -751,9 +749,7 @@ class ReferenceImage(ABC, MapFactory):
             }
 
             header = make_fitswcs_header(data, skycoord, **header_kwargs)
-            
             default_kwargs = {'data': data, 'header': header}
-
             m = sunpy.map.Map(data, header)        
 
         self.map = m
@@ -762,8 +758,6 @@ class ReferenceImage(ABC, MapFactory):
 class XRTReferenceImage(ReferenceImage):
 
     def __init__(self, ref_img_path: str = None):
-        
-
         super().__init__(ref_img_path, instrument='Xrt')
 
 @dataclass

@@ -6,3 +6,5 @@ conf.ini
 *.iml
 *.pyc
 *.jpg
+rushlight/examples/images/L1_XRT20120719_113821.1.fits
+rushlight/examples/loops/back_2012_center.pkl
