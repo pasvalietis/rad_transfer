@@ -13,9 +13,16 @@ from rushlight.config import config
 
 datacube = config.SIMULATIONS['DATASET']    # Collect synthetic box
 
+path_split = __file__.split('/')
+dirs_len = len(path_split)
+file_dir = path_split[0:dirs_len-1]
+file_dir_str = ''                           # Parent directory of this file
+for d in file_dir:
+    file_dir_str += d + '/'
+
 EVENT = {
-'IMG_PATH': './images/L1_XRT20120719_113821.1.fits',
-'PARAMS_PATH': './loops/back_2012_center.pkl',
+'IMG_PATH': file_dir_str + '/images/L1_XRT20120719_113821.1.fits',
+'PARAMS_PATH': file_dir_str + '/loops/back_2012_center.pkl',
 'zoom': 0.5
 }
 

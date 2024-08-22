@@ -5,6 +5,7 @@ from scipy import ndimage #, datasets
 
 import yt
 from yt.utilities.orientation import Orientation
+yt.set_log_level(50)
 
 from rushlight.config import config
 from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
@@ -83,11 +84,15 @@ class SyntheticImage(ABC):
 
         # Load subsampled 3D MHD file
         shen_datacube = config.SIMULATIONS['DATASET']
-        if isinstance(dataset, str):
-            downs_file_path = kwargs.get('datacube', shen_datacube)
+        try:
+            if isinstance(dataset, str):
+                self.data = yt.load(dataset)
+            else:
+                self.data = dataset
+        except:
+            print('\n No datacube provided! Using default datacube... \n')
+            downs_file_path = shen_datacube
             self.data = yt.load(downs_file_path)
-        else:
-            self.data = dataset
         
         # Crop MHD file
         center = [0.0, 0.5, 0.0]
@@ -105,7 +110,7 @@ class SyntheticImage(ABC):
         timediff = TimeDelta(timestep * self.timescale * u.s)
         start_time = Time(self.ref_img.reference_coordinate.obstime, scale='utc', format='isot')
         self.synth_obs_time = start_time + timediff
-        print('obstime:', self.synth_obs_time)
+        # print('obstime:', self.synth_obs_time)
         self.obstime = kwargs.get('obstime', self.synth_obs_time)  # Observation time
 
         self.zoom, self.image_shift = (None, None)
@@ -284,8 +289,8 @@ class SyntheticImage(ABC):
         # Inverting y component of the north vector in the MHD reference frame
         north_vec[1] = - north_vec[1]
 
-        print("\nNorm:")
-        print(norm_vec)
+        # print("\nNorm:")
+        # print(norm_vec)
         
         # DEFAULT: CAMERA UP
         default = False
@@ -293,9 +298,9 @@ class SyntheticImage(ABC):
             north = [0, 1., 0] 
             north_vec = np.array(north)
         
-        print("North:")
-        print(north_vec)
-        print("\n")
+        # print("North:")
+        # print(north_vec)
+        # print("\n")
 
         self.northvector = north_vec
         self.normvector = norm_vec
@@ -396,6 +401,10 @@ class SyntheticImage(ABC):
             return ax, self.synth_map, self.normvector, self.northvector, self.image_shift
 
         else:
+            self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
+            self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
+            self.synth_map.draw_limb()
+
             return self.synth_map, self.normvector, self.northvector, self.image_shift
 
     def make_filter_image_field(self, **kwargs):
