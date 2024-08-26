@@ -55,7 +55,7 @@ class SyntheticImage(ABC):
     Parent class for generating synthetic images
     """
 
-    def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+    def __init__(self, dataset = None, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
         """Object to contain all of the elements of the synthetic image and simulated flare
 
         :param dataset: Either PATH to the local simulated dataset or a loaded yt object
@@ -84,15 +84,18 @@ class SyntheticImage(ABC):
 
         # Load subsampled 3D MHD file
         shen_datacube = config.SIMULATIONS['DATASET']
-        try:
+
+        if dataset:
             if isinstance(dataset, str):
-                self.data = yt.load(dataset)
-            else:
+                    self.data = yt.load(dataset)
+            elif isinstance(dataset, yt.frontends.ytdata.data_structures.YTGridDataset):
                 self.data = dataset
-        except:
+            else:
+                print('\n Invalid datacube provided! Using default datacube... \n')
+                self.data = yt.load(shen_datacube)
+        else:
             print('\n No datacube provided! Using default datacube... \n')
-            downs_file_path = shen_datacube
-            self.data = yt.load(downs_file_path)
+            self.data = yt.load(shen_datacube)
         
         # Crop MHD file
         center = [0.0, 0.5, 0.0]
@@ -145,24 +148,24 @@ class SyntheticImage(ABC):
         if 'pkl' in kwargs:
             if isinstance(kwargs.get('pkl') , dict):
                 self.dims = kwargs.get('pkl')
-                self.radius = dims['radius']
-                self.height = dims['height']
-                self.phi0 = dims['phi0']
-                self.theta0 = dims['theta0']
-                self.el = dims['el']
-                self.az = dims['az']
-                self.samples_num = dims['samples_num']
+                self.radius = self.dims['radius']
+                self.height = self.dims['height']
+                self.phi0 = self.dims['phi0']
+                self.theta0 = self.dims['theta0']
+                self.el = self.dims['el']
+                self.az = self.dims['az']
+                self.samples_num = self.dims['samples_num']
             else:
                 with open(kwargs.get('pkl'), 'rb') as f:
-                    dims = pickle.load(f)
+                    self.dims = pickle.load(f)
                     # print(f'Loop dimensions loaded:{dims}')
-                    self.radius = dims['radius']
-                    self.height = dims['height']
-                    self.phi0 = dims['phi0']
-                    self.theta0 = dims['theta0']
-                    self.el = dims['el']
-                    self.az = dims['az']
-                    self.samples_num = dims['samples_num']
+                    self.radius = self.dims['radius']
+                    self.height = self.dims['height']
+                    self.phi0 = self.dims['phi0']
+                    self.theta0 = self.dims['theta0']
+                    self.el = self.dims['el']
+                    self.az = self.dims['az']
+                    self.samples_num = self.dims['samples_num']
                     f.close()
         else:
             # Set the loop parameters using the provided values or default values
@@ -173,6 +176,16 @@ class SyntheticImage(ABC):
             self.el = kwargs.get('el', self.el)
             self.az = kwargs.get('az', self.az)
             self.samples_num = kwargs.get('samples_num', self.samples_num)
+
+            self.dims = {
+                'radius':       self.radius,
+                'height':       self.height,
+                'phi0':         self.radius,
+                'theta0':       self.height,
+                'el':           self.radius,
+                'az':           self.height,
+                'samples_num':  self.samples_num
+            }
         
         self.lat = self.theta0
         self.lon = self.phi0
@@ -193,9 +206,11 @@ class SyntheticImage(ABC):
                 except:
                     self.ref_img = sunpy.map.Map(self.smap_path)
         except:
-            print("\n\nHandled Exception:\n")
-            raise Exception('Please provide:', '\n a) A sunpy map object',
-            '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
+            print("\n\nHandled Exception:\nNo reference image provided, generating default\n")
+            self.ref_img = ReferenceImage()
+
+            # raise Exception('Please provide:', '\n a) A sunpy map object',
+            # '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
 
     def calc_vect(self, **kwargs):
         """Calculates the north and normal vectors for the synthetic image
@@ -458,7 +473,7 @@ class SyntheticImage(ABC):
         # transpose synthetic image (swap axes for imshow)
         self.image = np.array(prji).T
 
-        if self.zoom:
+        if self.zoom and not (self.zoom == 1):
             self.image = self.zoom_out(self.image, self.zoom)
 
         # return self.image
@@ -634,6 +649,14 @@ class SyntheticImage(ABC):
 
         return SkyCoord(x_asec, y_asec, frame=self.ref_img.coordinate_frame) #(x_asec, y_asec)
 
+    def save_synthobj(self):
+        savedict = {
+            'dims':         self.dims,
+            'coord_frame':  None
+        }
+
+        return savedict
+
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
 
@@ -653,7 +676,7 @@ class SyntheticImage(ABC):
 @dataclass
 class SyntheticFilterImage(SyntheticImage):
     """ For UV and Soft Xrays """
-    def __init__(self, dataset, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+    def __init__(self, dataset=None, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
         super().__init__(dataset, smap_path, smap, **kwargs)
 
 @dataclass
@@ -735,18 +758,22 @@ class ReferenceImage(ABC, MapFactory):
 
         if ref_img_path:
             m = sunpy.map.Map(ref_img_path) 
-        else:
+        else: 
+            import datetime
+
             # Create an empty dataset
             resolution = 1000
             data = np.full((resolution, resolution), np.random.randint(100))
-            obstime = '2000-00-00T00:00:00'
+            obstime = datetime.datetime(2000,1,1,0,0,0)
             # Define a reference coordinate and create a header using sunpy.map.make_fitswcs_header
             skycoord = SkyCoord(0*u.arcsec, 0*u.arcsec, obstime=obstime,
                                 observer='earth', frame=frames.Helioprojective)
             # Scale set to the following for solar limb to be in the field of view
             scale = 220 # Changes bounds of the resulting helioprojective view
             
-            instr = kwargs.get('instrument')
+            instr = kwargs.get('instrument', 'DefaultInstrument')
+            self.instrument = instr
+
             header_kwargs = {
                 'scale': [scale, scale]*u.arcsec/u.pixel,
                 'telescope': instr,
