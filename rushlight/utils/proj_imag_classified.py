@@ -1,9 +1,12 @@
 #!/usr/bin/env python
+# This script holds the up-to-date versions of all image projection algorithms, made accessible
+# through rushlight class objects
 
 import numpy as np
 from scipy import ndimage #, datasets
 
 import yt
+from yt.frontends.ytdata.data_structures import YTGridDataset
 from yt.utilities.orientation import Orientation
 yt.set_log_level(50)
 
@@ -88,13 +91,13 @@ class SyntheticImage(ABC):
         if dataset:
             if isinstance(dataset, str):
                     self.data = yt.load(dataset)
-            elif isinstance(dataset, yt.frontends.ytdata.data_structures.YTGridDataset):
+            elif isinstance(dataset, YTGridDataset):
                 self.data = dataset
             else:
-                print('\n Invalid datacube provided! Using default datacube... \n')
+                print('Invalid datacube provided! Using default datacube... \n')
                 self.data = yt.load(shen_datacube)
         else:
-            print('\n No datacube provided! Using default datacube... \n')
+            print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
         
         # Crop MHD file
@@ -168,6 +171,8 @@ class SyntheticImage(ABC):
                     self.samples_num = self.dims['samples_num']
                     f.close()
         else:
+            print("No loop coord object provided! Using default / kwarg values... \n")
+
             # Set the loop parameters using the provided values or default values
             self.radius = kwargs.get('radius', self.radius)
             self.height = kwargs.get('height', self.height)
@@ -206,7 +211,7 @@ class SyntheticImage(ABC):
                 except:
                     self.ref_img = sunpy.map.Map(self.smap_path)
         except:
-            print("\n\nHandled Exception:\nNo reference image provided, generating default\n")
+            print("Handled Exception:\nNo reference image provided, generating default\n")
             self.ref_img = ReferenceImage()
 
             # raise Exception('Please provide:', '\n a) A sunpy map object',
@@ -423,10 +428,11 @@ class SyntheticImage(ABC):
             return self.synth_map, self.normvector, self.northvector, self.image_shift
 
     def make_filter_image_field(self, **kwargs):
-        """_summary_
+        """Selects and applies the correct filter image field to the synthetic dataset
 
-        :raises ValueError: _description_
-        :raises ValueError: _description_
+        :raises ValueError: Raised if filter instrument is unrecognized
+        :raises ValueError: Raised if AIA wavelength is not from valid selection 
+                            (1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335)
         """
 
         cmap = {}
@@ -447,6 +453,7 @@ class SyntheticImage(ABC):
                 raise ValueError("AIA wavelength should be one of the following:"
                                  "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
 
+        # Adds intensity fields to the self-contained dataset
         imaging_model.make_intensity_fields(self.data)
 
         field = str(self.instr) + '_filter_band'
@@ -456,8 +463,7 @@ class SyntheticImage(ABC):
             self.plot_settings['cmap'] = cmap[self.instr]
 
     def proj_and_imag(self, **kwargs):
-        """_summary_
-        """
+        """Projects the synthetic dataset and applies image zoom and shift"""
 
         self.make_filter_image_field()  # Create emission fields
 
@@ -488,13 +494,13 @@ class SyntheticImage(ABC):
     def zoom_out(self, img, scale):
         """Move the virtual observer away from from the projected dataset
 
-        :param img: _description_
-        :type img: _type_
-        :param scale: _description_
-        :type scale: _type_
-        :raises ValueError: _description_
-        :return: _description_
-        :rtype: _type_
+        :param img: Array-like object containing pixel brightness values
+        :type img: numpy.ndarray, other
+        :param scale: Value indicating the amount of zoom to apply (<1)
+        :type scale: float
+        :raises ValueError: Raised if the zoom parameter is not less than one (can only zoom in)
+        :return: Zoomed and cropped image array
+        :rtype: numpy.ndarray, other
         """
 
         new_arr = np.ones_like(img) * img.min()
@@ -514,7 +520,9 @@ class SyntheticImage(ABC):
     def make_synthetic_map(self, **kwargs):
         """
         Creates a synthetic map object that can be loaded/edited with sunpy
-        :return:
+
+        :return: Synthetic sunpy map created with projected dataset and specified header data
+        :rtype: sunpy.map.Map
         """
 
         data = self.image
@@ -561,19 +569,16 @@ class SyntheticImage(ABC):
 
         return self.synth_map
 
-    def project_points(self, dataset=None, image=None):
-        
+    def project_points(self, dataset: YTGridDataset=None, image=None):
         """Identify pixels where three dimensional points from the original dataset are projected
         on the image plane
         TODO: Add markers on the synthetic image object
 
-        :param dataset: _description_, defaults to None
-        :type dataset: _type_, optional
+        :param dataset: Synthetic datacube object (yt object), defaults to None
+        :type dataset: YTGridDataset, optional
         :param image: _description_, defaults to None
         :type image: _type_, optional
-        """        
 
-        """
         :return: x, y -- pixels on which the point inside synthetic datacube projects to
         """
 
@@ -593,8 +598,8 @@ class SyntheticImage(ABC):
         :type coord: unyt_array
         :param orientation: Orientation object calculated from norm / north vector, defaults to None
         :type orientation: Orientation, optional
-        :return: _description_
-        :rtype: _type_
+        :return: Cooordinates of the projected point from the viewing camera perspective
+        :rtype: tuple
         """     
 
         # coord_copy should be a unyt array in code_units
@@ -628,7 +633,7 @@ class SyntheticImage(ABC):
         reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
         and y axis is changing from 0 to 1.
 
-        :param code_coord: 
+        :param code_coord: Requested 3D coordinates within datacube object
         :type code_coord: unyt_array
         :return: Arcsecond coordinates in observer's frame of reference
         :rtype: SkyCoord
@@ -752,8 +757,16 @@ class SyntheticBandImage():
 
 @dataclass
 class ReferenceImage(ABC, MapFactory):
+    """
+    Default object for reference image types
+    """
 
     def __init__(self, ref_img_path: str = None, **kwargs):
+        """Constructor for the default reference image object
+
+        :param ref_img_path: Path to the reference image .fits file, defaults to None
+        :type ref_img_path: str, optional
+        """
         reference_image = None
 
         if ref_img_path:
@@ -792,12 +805,18 @@ class ReferenceImage(ABC, MapFactory):
 
 @dataclass
 class XRTReferenceImage(ReferenceImage):
+    """
+    XRT instrument variant of default reference image object
+    """
 
     def __init__(self, ref_img_path: str = None):
         super().__init__(ref_img_path, instrument='Xrt')
 
 @dataclass
 class AIAReferenceImage(ReferenceImage):
+    """
+    AIA instrument variant of default reference image object
+    """
 
     def __init__(self, ref_img_path):
         super().__init__(ref_img_path)
