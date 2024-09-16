@@ -413,6 +413,40 @@ class SyntheticImage(ABC):
                 # ax.autoscale(False)
                 self.synth_map.plot(axes=ax)
                 self.synth_map.draw_limb()
+
+                debug = False
+                if debug:
+                    # Plot Synthetic Footpont
+                    north_q = unyt_array(self.northvector, self.data.units.code_length)
+                    norm_q = unyt_array(self.normvector, self.data.units.code_length)
+                    ds_orientation = Orientation(norm_q, north_vector=north_q)
+
+                    synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
+                    synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
+                    synth_fpt_asec = self.code_coords_to_arcsec(synth_fpt_2d,
+                                                                # center_x = 0,
+                                                                # center_y = 0
+                                                                )
+                    ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
+                    ax.plot(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'og')
+
+                    # Plot Observed Footpoint
+                    mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
+                        frame='heliographic_stonyhurst',
+                        observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
+                    mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
+                    ax.plot(mpt_pix[0], mpt_pix[1], 'or')
+
+                    # Plot Sun center
+                    sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
+                        frame='heliographic_stonyhurst',
+                        observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
+                    sc_pix = self.ref_img.wcs.world_to_pixel(sc)
+                    ax.plot(sc_pix[0], sc_pix[1], 'oc')
+
+                    # Plot (0,0) [correlates to bl of image]
+                    ax.plot(0,0,'oy')
+
             elif plot == 'obs':
                 ax = fig.add_subplot(projection=self.ref_img)
                 self.ref_img.plot(axes=ax)
@@ -567,7 +601,7 @@ class SyntheticImage(ABC):
 
         return self.synth_map
 
-    def project_point_copy(self, y_points):
+    def project_point_copy1(self, y_points):
         """Identify pixels where three dimensional points from the original dataset are projected
         on the image plane
         TODO: Add markers on the synthetic image object
@@ -611,7 +645,7 @@ class SyntheticImage(ABC):
 
         return map_ypoints_coords
 
-    def project_point(self, y_points):
+    def project_point_copy2(self, y_points):
         """Identify pixels where three dimensional points from the original dataset are projected
         on the image plane
 
@@ -682,6 +716,152 @@ class SyntheticImage(ABC):
 
         return map_ypoints_coords
 
+    def project_point_copy3(self, y_points):
+        """Identify pixels where three dimensional points from the original dataset are projected
+        on the image plane
+
+        :param dataset: Dataset containing 3d coordinates for ypoints, defaults to None
+        :type dataset: YTGridDataset, optional
+
+        :return: x, y -- pixels on which the point inside synthetic datacube projects to
+        """
+
+        north_q = unyt_array(self.northvector, self.data.units.code_length)
+        norm_q = unyt_array(self.normvector, self.data.units.code_length)
+        ds_orientation = Orientation(norm_q, north_vector=north_q)
+
+        synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
+        synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
+        synth_fpt_asec = self.code_coords_to_arcsec(synth_fpt_2d,
+                                                    # center_x = 0,
+                                                    # center_y = 0
+                                                    )
+        ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
+
+        # Foot Midpoint from CLB
+        mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
+                    frame='heliographic_stonyhurst',
+                    observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
+        mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
+
+        # Find difference between pixel positions
+        x1 = float(mpt_pix[0])
+        y1 = float(mpt_pix[1])
+
+        # Shift and scale the synthetic coords by zoom
+        x2 = float(ori_pix[0]) * self.zoom
+        y2 = float(ori_pix[1]) * self.zoom
+
+        x = int((x1-x2))
+        y = int((y1-y2))
+
+        # Calculate displacement to bottom left corner of map
+        m = self.ref_img
+        bl_coord_x = m.bottom_left_coord.Tx
+        bl_coord_y = m.bottom_left_coord.Ty
+        bl_pix_x = (bl_coord_x / m.scale[0]).value
+        bl_pix_y = (bl_coord_y / m.scale[1]).value
+
+        # Calculate displacement to bottom left corner of map
+        c_coord_x = m.center.Tx
+        c_coord_y = m.center.Ty
+        c_pix_x = (c_coord_x / m.scale[0]).value
+        c_pix_y = (c_coord_y / m.scale[1]).value
+
+        # Sun Center
+        sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
+            frame='heliographic_stonyhurst',
+            observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
+        sc_pix = self.ref_img.wcs.world_to_pixel(sc)
+
+        sc2bl_x = float(0 - sc_pix[0])
+        sc2bl_y = float(0 - sc_pix[1])
+
+        map_ypoints_coords = []
+        for ypt in y_points['coordinates']:
+            # Convert 3d code coord to wcs pixels [centered at (0,0)?]
+            ypt_2d_code = self.coord_projection(ypt, ds_orientation)
+            ypt_2d_asec = self.code_coords_to_arcsec(ypt_2d_code,
+                                                    # center_x = 0,
+                                                    # center_y = 0
+                                                    )
+            ypt_coord_pix = self.ref_img.wcs.world_to_pixel(ypt_2d_asec)
+
+            x_shifted = (
+                        #  x
+                         + float(ypt_coord_pix[0]) * self.zoom
+                        #  + bl_pix_x
+                        #  + c_pix_y
+
+                         + sc2bl_x
+                         + self.image_shift[0]
+                         + self.start_pix[0]
+                         )
+            y_shifted = (
+                        #  y
+                         + float(ypt_coord_pix[1]) * self.zoom
+                        #  + bl_pix_y
+                        #  + c_pix_y
+
+                         + sc2bl_y
+                         + self.image_shift[1]
+                         + self.start_pix[1]
+                         )
+
+            # Save the shifted coords
+            shifted = [x_shifted, y_shifted]
+            map_ypoints_coords.append(shifted)
+
+        return map_ypoints_coords
+
+    def project_point(self, y_points):
+        """Identify pixels where three dimensional points from the original dataset are projected
+        on the image plane
+
+        :param dataset: Dataset containing 3d coordinates for ypoints, defaults to None
+        :type dataset: YTGridDataset, optional
+
+        :return: x, y -- pixels on which the point inside synthetic datacube projects to
+        """
+        # Orientation of synthetic flare from CLB
+        north_q = unyt_array(self.northvector, self.data.units.code_length)
+        norm_q = unyt_array(self.normvector, self.data.units.code_length)
+        ds_orientation = Orientation(norm_q, north_vector=north_q)
+
+        # Sun Center to bottom left pixel displacement
+        sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
+            frame='heliographic_stonyhurst',
+            observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
+        sc_pix = self.ref_img.wcs.world_to_pixel(sc)
+
+        sc2bl_x = float(0 - sc_pix[0])
+        sc2bl_y = float(0 - sc_pix[1])
+
+        map_ypoints_coords = []
+        for ypt in y_points['coordinates']:
+            ypt_2d_code = self.coord_projection(ypt, ds_orientation)
+            ypt_2d_asec = self.code_coords_to_arcsec(ypt_2d_code)
+            ypt_coord_pix = self.ref_img.wcs.world_to_pixel(ypt_2d_asec)
+
+            x_shifted = (
+                         + float(ypt_coord_pix[0]) * self.zoom
+                         + sc2bl_x
+                         + self.image_shift[0]
+                         + self.start_pix[0]
+                         )
+            y_shifted = (
+                         + float(ypt_coord_pix[1]) * self.zoom
+                         + sc2bl_y
+                         + self.image_shift[1]
+                         + self.start_pix[1]
+                         )
+
+            # Save the shifted coords
+            shifted = [x_shifted, y_shifted]
+            map_ypoints_coords.append(shifted)
+
+        return map_ypoints_coords
+
     def coord_projection(self, coord: unyt_array, orientation: Orientation=None, **kwargs):
         """Reproduces yt plot_modifications _project_coords functionality
 
@@ -719,7 +899,7 @@ class SyntheticImage(ABC):
 
         return ret_coord
 
-    def code_coords_to_arcsec(self, code_coord: unyt_array):
+    def code_coords_to_arcsec(self, code_coord: unyt_array, **kwargs):
         """Converts coordinates in simulated datcube into arcsecond coordinates from the 
         reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
         and y axis is changing from 0 to 1.
@@ -732,8 +912,8 @@ class SyntheticImage(ABC):
 
         # acquire x and y extents of the reference_image
         # image center:
-        center_x = self.ref_img.center.Tx
-        center_y = self.ref_img.center.Ty
+        center_x = kwargs.get('center_x', self.ref_img.center.Tx)
+        center_y = kwargs.get('center_y', self.ref_img.center.Ty)
 
         x_code_coord, y_code_coord = code_coord[0], code_coord[1]
 
