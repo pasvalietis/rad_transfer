@@ -135,10 +135,10 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # disp = hheight
     # disp = 0
     
-    timescale = kwargs.get('timescale', 291.89)
+    timescale = kwargs.get('timescale', 82.35)
     
     timestep = subs_ds.current_time.value.item()
-    timediff = TimeDelta(10 * timestep * timescale * u.s)
+    timediff = TimeDelta(timestep * timescale * u.s)
     # factor 10 to convert timestep to slice number
     
     start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
