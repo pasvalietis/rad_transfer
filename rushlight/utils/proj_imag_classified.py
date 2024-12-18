@@ -76,7 +76,9 @@ class SyntheticImage(ABC):
         # Header data
         instr = self.ref_img.instrument.split(' ')[0].lower()
         self.instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
-        self.channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
+        self.channel = kwargs.get('channel', "Ti-poly" if 
+                                  (instr.lower() == 'xrt' or instr.lower() == 'defaultinstrument') 
+                                  else 171)
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
 
         self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
@@ -171,7 +173,7 @@ class SyntheticImage(ABC):
                     self.samples_num = self.dims['samples_num']
                     f.close()
         else:
-            print("No loop coord object provided! Using default / kwarg values... \n")
+            print("No loop coord object provided! Using kwarg (or default) values... \n")
 
             # Set the loop parameters using the provided values or default values
             self.radius = kwargs.get('radius', self.radius)
@@ -211,8 +213,8 @@ class SyntheticImage(ABC):
                 except:
                     self.ref_img = sunpy.map.Map(self.smap_path)
         except:
-            print("Handled Exception:\nNo reference image provided, generating default\n")
-            self.ref_img = ReferenceImage()
+            print("No reference image provided, generating default\n")
+            self.ref_img = ReferenceImage().map
 
             # raise Exception('Please provide:', '\n a) A sunpy map object',
             # '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
@@ -472,7 +474,7 @@ class SyntheticImage(ABC):
 
         cmap = {}
         imaging_model = None
-        instr_list = ['xrt', 'aia']
+        instr_list = ['xrt', 'aia', 'defaultinstrument']
 
         if self.instr not in instr_list:
             raise ValueError("instr should be in the instrument list: ", instr_list)
@@ -480,13 +482,18 @@ class SyntheticImage(ABC):
         if self.instr == 'xrt':
             imaging_model = xrt.XRTModel("temperature", "density", self.channel)
             cmap['xrt'] = color_tables.xrt_color_table()
-        if self.instr == 'aia':
+        elif self.instr == 'aia':
             imaging_model = uv.UVModel("temperature", "density", self.channel)
             try:
                 cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
             except ValueError:
                 raise ValueError("AIA wavelength should be one of the following:"
                                  "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+        elif self.instr == 'defaultinstrument':
+            print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
+            self.instr = 'xrt'
+            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            cmap['xrt'] = color_tables.xrt_color_table()
 
         # Adds intensity fields to the self-contained dataset
         imaging_model.make_intensity_fields(self.data)
@@ -600,7 +607,8 @@ class SyntheticImage(ABC):
         self.synth_map = sunpy.map.Map(self.image, header)
 
         return self.synth_map
-
+    
+    def project_point_old(self, y_points):
         """Identify pixels where three dimensional points from the original dataset are projected
         on the image plane
 
