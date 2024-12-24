@@ -135,7 +135,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # disp = hheight
     # disp = 0
     
-    timescale = kwargs.get('timescale', 82.35)
+    timescale = kwargs.get('timescale', 159.21)
     
     timestep = subs_ds.current_time.value.item()
     timediff = TimeDelta(timestep * timescale * u.s)
@@ -456,7 +456,10 @@ def coord_projection(coord, dataset, orientation=None, **kwargs):
 
     ret_coord = (x, y) # (y, x)
 
-    return ret_coord
+    if orientation:
+        return ret_coord
+    else:
+        return ret_coord, orientation
 
 def code_coords_to_arcsec(code_coord, ref_image):
     """
