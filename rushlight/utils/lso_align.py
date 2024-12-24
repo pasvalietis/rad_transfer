@@ -146,13 +146,13 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     
     print('obstime:', synth_obs_time)
 
-    ref_coord = SkyCoord(ref_img.reference_coordinate.Tx,
+    ref_coord = SkyCoord(ref_img.reference_coordinate.Tx, 
                          ref_img.reference_coordinate.Ty,
                         obstime=synth_obs_time,
                         observer=ref_img.reference_coordinate.observer,  # Temporarily 1 AU away
                         frame='helioprojective')#ref_img.reference_coordinate.frame) #ref_img.reference_coordinate
 
-
+    
     map_kwargs = {'obstime': synth_obs_time,
               'reference_coord': ref_coord,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
