@@ -120,11 +120,13 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     x, y = diff_roll(ref_img, lon, lat, normvector, northvector, subs_ds, **kwargs,)
 
     zoom = kwargs.get('zoom', None)
+    bkg_fill = kwargs.get('bkg_fill', 5.e-1)
+
     synth_imag.proj_and_imag(plot_settings=synth_plot_settings,
                              view_settings=synth_view_settings,
                              image_shift=[x, y],  # move the bottom center of the flare in [x,y]
                              image_zoom=zoom,
-                             bkg_fill=kwargs.get('bkg_fill', 5.e-1),) #np.min(ref_img.data))
+                             bkg_fill=bkg_fill) #np.min(ref_img.data))
 
     # define the heliographic sky coordinate of the midpoint of the loop
     hheight = 75 * u.Mm  # Half the height of the simulation box
@@ -133,18 +135,26 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # disp = hheight
     # disp = 0
     
-    timescale = kwargs.get('timescale', 109.8)
+    timescale = kwargs.get('timescale', 159.21)
     
     timestep = subs_ds.current_time.value.item()
     timediff = TimeDelta(timestep * timescale * u.s)
-    
+    # factor 10 to convert timestep to slice number
+
     start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
     synth_obs_time = start_time + timediff
     
     print('obstime:', synth_obs_time)
-    
+
+    ref_coord = SkyCoord(ref_img.reference_coordinate.Tx,
+                         ref_img.reference_coordinate.Ty,
+                        obstime=synth_obs_time,
+                        observer=ref_img.reference_coordinate.observer,  # Temporarily 1 AU away
+                        frame='helioprojective')#ref_img.reference_coordinate.frame) #ref_img.reference_coordinate
+
+
     map_kwargs = {'obstime': synth_obs_time,
-              'reference_coord': ref_img.reference_coordinate,
+              'reference_coord': ref_coord,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
               'scale': u.Quantity(ref_img.scale),
               'telescope': ref_img.detector,
@@ -446,7 +456,10 @@ def coord_projection(coord, dataset, orientation=None, **kwargs):
 
     ret_coord = (x, y) # (y, x)
 
-    return ret_coord
+    if orientation:
+        return ret_coord
+    else:
+        return ret_coord, orientation
 
 def code_coords_to_arcsec(code_coord, ref_image):
     """
