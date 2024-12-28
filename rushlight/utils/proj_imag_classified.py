@@ -71,7 +71,7 @@ class SyntheticImage(ABC):
         """        
 
         self.set_loop_params(**kwargs)
-        self.set_reference_image(smap_path, smap)
+        self.set_reference_image(smap_path, smap, **kwargs)
 
         # Header data
         instr = self.ref_img.instrument.split(' ')[0].lower()
@@ -93,11 +93,13 @@ class SyntheticImage(ABC):
         if dataset:
             if isinstance(dataset, str):
                     self.data = yt.load(dataset)
-            elif isinstance(dataset, YTGridDataset):
-                self.data = dataset
             else:
-                print('Invalid datacube provided! Using default datacube... \n')
-                self.data = yt.load(shen_datacube)
+                try:
+                    dataset.field_list
+                    self.data = dataset
+                except:
+                    print('Invalid datacube provided! Using default datacube... \n')
+                    self.data = yt.load(shen_datacube)
         else:
             print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
@@ -197,7 +199,7 @@ class SyntheticImage(ABC):
         self.lat = self.theta0
         self.lon = self.phi0
 
-    def set_reference_image(self, smap_path: str=None, smap: sunpy.map.Map=None):
+    def set_reference_image(self, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
         # Reference Image
         self.ref_img = None
 
@@ -214,7 +216,7 @@ class SyntheticImage(ABC):
                     self.ref_img = sunpy.map.Map(self.smap_path)
         except:
             print("No reference image provided, generating default\n")
-            self.ref_img = ReferenceImage().map
+            self.ref_img = ReferenceImage(**kwargs).map
 
             # raise Exception('Please provide:', '\n a) A sunpy map object',
             # '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
@@ -349,8 +351,6 @@ class SyntheticImage(ABC):
 
         if self.zoom and self.zoom < 1:
             # Find coordinates of bottom left corner of "zoom area"
-            if self.zoom >= 1:
-                    raise ValueError("Scale parameter has to be lower than 1")
             zoomed_img = ndimage.zoom(self.ref_img.data, self.zoom)  # scale<1
             y, x = self.ref_img.data.shape
             cropx = (zoomed_img.shape[0])
@@ -358,6 +358,7 @@ class SyntheticImage(ABC):
             startx = (x - cropx) // 2
             starty = (y - cropy) // 2
         else:
+            print("Scale parameter has to be lower than 1! Defaulting to self.zoom = 1... \n")
             startx = 0
             starty = 0
             self.zoom = 1
@@ -404,19 +405,15 @@ class SyntheticImage(ABC):
                 ax = fig.add_subplot(projection=comp.get_map(0))
                 comp.plot(axes=ax)
             elif plot == 'synth':
-                # self.synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
                 self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
-                # self.synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
-                # self.synth_map.plot_settings['norm'] = self.plot_settings['norm']
                 self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
                 
                 ax = fig.add_subplot(projection=self.synth_map)
                 ax.grid(False)
-                # ax.autoscale(False)
                 self.synth_map.plot(axes=ax)
                 self.synth_map.draw_limb()
 
-                debug = False
+                debug = True
                 if debug:
                     # Plot Synthetic Footpont
                     north_q = unyt_array(self.northvector, self.data.units.code_length)
@@ -431,6 +428,7 @@ class SyntheticImage(ABC):
                                                                 )
                     ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
                     ax.plot(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'og')
+                    ax.text(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'origin', color='g')
 
                     # Plot Observed Footpoint
                     mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
@@ -438,6 +436,7 @@ class SyntheticImage(ABC):
                         observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
                     mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
                     ax.plot(mpt_pix[0], mpt_pix[1], 'or')
+                    ax.text(mpt_pix[0], mpt_pix[1], 'midpoint', color='r')
 
                     # Plot Sun center
                     sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
@@ -445,9 +444,12 @@ class SyntheticImage(ABC):
                         observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
                     sc_pix = self.ref_img.wcs.world_to_pixel(sc)
                     ax.plot(sc_pix[0], sc_pix[1], 'oc')
+                    ax.text(sc_pix[0], sc_pix[1], 'sun center', color='c')
 
                     # Plot (0,0) [correlates to bl of image]
                     ax.plot(0,0,'oy')
+                    ax.text(0,0, 'bottom left', color='y')
+
 
             elif plot == 'obs':
                 ax = fig.add_subplot(projection=self.ref_img)
@@ -815,7 +817,9 @@ class SyntheticImage(ABC):
         x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
         y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
 
-        return SkyCoord(x_asec, y_asec, frame=self.ref_img.coordinate_frame) #(x_asec, y_asec)
+        asec_coords = SkyCoord(x_asec, y_asec, frame=self.ref_img.coordinate_frame) #(x_asec, y_asec)
+
+        return asec_coords
 
     def save_synthobj(self):
         savedict = {
@@ -939,13 +943,16 @@ class ReferenceImage(ABC, MapFactory):
 
             # Create an empty dataset
             resolution = 1000
-            data = np.full((resolution, resolution), np.random.randint(100))
+            # data = np.full((resolution, resolution), np.random.randint(100))
+            data = np.random.randint(0, 1e6, size=(resolution, resolution)) 
+
             obstime = datetime.datetime(2000,1,1,0,0,0)
             # Define a reference coordinate and create a header using sunpy.map.make_fitswcs_header
             skycoord = SkyCoord(0*u.arcsec, 0*u.arcsec, obstime=obstime,
                                 observer='earth', frame=frames.Helioprojective)
             # Scale set to the following for solar limb to be in the field of view
-            scale = 220 # Changes bounds of the resulting helioprojective view
+            # scale = 220 # Changes bounds of the resulting helioprojective view
+            scale = kwargs.get('refmap_scale', 1)
             
             instr = kwargs.get('instrument', 'DefaultInstrument')
             self.instrument = instr
