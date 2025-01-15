@@ -397,23 +397,23 @@ class SyntheticImage(ABC):
         :return: Synthetic map object, normvector, northvector, and image shift
         :rtype: tuple
         """
+        self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
+        self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
 
         if fig:
             if plot == 'comp':
-                comp = sunpy.map.Map(self.synth_map, self.ref_img, composite=True)
-                comp.set_alpha(0, 0.50)
-                ax = fig.add_subplot(projection=comp.get_map(0))
-                comp.plot(axes=ax)
-            elif plot == 'synth':
-                self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
-                self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
+                comp_map = sunpy.map.Map(self.ref_img, self.synth_map, composite=True)
                 
+                alpha = kwargs.get('alpha', 0.5)
+                comp_map.set_alpha(1, alpha)
+                ax = fig.add_subplot(projection=comp_map.get_map(0))
+                comp_map.plot(axes=ax)
+            elif plot == 'synth':                
                 ax = fig.add_subplot(projection=self.synth_map)
                 ax.grid(False)
                 self.synth_map.plot(axes=ax)
-                self.synth_map.draw_limb()
 
-                debug = True
+                debug = kwargs.get('debug', False)
                 if debug:
                     # Plot Synthetic Footpont
                     north_q = unyt_array(self.northvector, self.data.units.code_length)
@@ -449,8 +449,6 @@ class SyntheticImage(ABC):
                     # Plot (0,0) [correlates to bl of image]
                     ax.plot(0,0,'oy')
                     ax.text(0,0, 'bottom left', color='y')
-
-
             elif plot == 'obs':
                 ax = fig.add_subplot(projection=self.ref_img)
                 self.ref_img.plot(axes=ax)
@@ -460,9 +458,6 @@ class SyntheticImage(ABC):
             return ax, self.synth_map, self.normvector, self.northvector, self.image_shift
 
         else:
-            self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
-            self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
-            self.synth_map.draw_limb()
 
             return self.synth_map, self.normvector, self.northvector, self.image_shift
 
