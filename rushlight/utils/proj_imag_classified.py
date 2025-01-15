@@ -471,7 +471,7 @@ class SyntheticImage(ABC):
 
         cmap = {}
         imaging_model = None
-        instr_list = ['xrt', 'aia', 'defaultinstrument']
+        instr_list = ['xrt', 'aia', 'secchi', 'defaultinstrument']
 
         if self.instr not in instr_list:
             raise ValueError("instr should be in the instrument list: ", instr_list)
@@ -479,7 +479,8 @@ class SyntheticImage(ABC):
         if self.instr == 'xrt':
             imaging_model = xrt.XRTModel("temperature", "density", self.channel)
             cmap['xrt'] = color_tables.xrt_color_table()
-        elif self.instr == 'aia':
+        elif self.instr == 'aia' or self.instr == 'secchi':
+            self.instr = 'aia'
             imaging_model = uv.UVModel("temperature", "density", self.channel)
             try:
                 cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
