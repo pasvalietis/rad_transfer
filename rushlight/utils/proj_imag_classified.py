@@ -34,6 +34,7 @@ import astropy.constants as const
 
 import pickle
 import textwrap
+import os
 import sys
 sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
@@ -818,12 +819,58 @@ class SyntheticImage(ABC):
         return asec_coords
 
     def save_synthobj(self):
-        savedict = {
-            'dims':         self.dims,
-            'coord_frame':  None
-        }
+        event_dict = {}
+        event_dict['header'] = self.ref_img.fits_header
+        event_dict['loop_params'] = self.dims
+        event_dict['norm_vector'] = self.normvector
+        event_dict['norm_vector'] = self.northvector
 
-        return savedict
+        telescope = event_dict['header']['TELESCOP']
+        dateobs = event_dict['header']['DATE-OBS']
+        event_key = f'{telescope}|{dateobs}'
+        synthobj = {event_key: event_dict}
+
+        return synthobj
+    
+    def append_synthobj(self, target = None):    
+        if target:
+            if isinstance(target, str):
+                with open(target, 'rb') as f:
+                    synthobj = pickle.load(f)
+                    f.close()
+            elif isinstance(target, dir):
+                synthobj = target
+            else:
+                print('Invalid target! Creating empty dict...\n')
+                synthobj = {}
+        else:
+            print('No target! Creating empty dict...\n')
+            synthobj = {}
+
+        this_synthobj = self.save_synthobj()
+        key = list(this_synthobj.keys())[0]
+        value = this_synthobj[key]
+        synthobj[key] = value
+
+        if isinstance(target, str):
+            with open(target, 'wb') as file:
+                pickle.dump(synthobj, file)
+                file.close()
+        else:
+            import datetime
+            now = datetime.datetime.now()
+
+            loop_dir = './loop_parameters/'
+            if not os.path.exists(loop_dir):
+                os.makedirs(loop_dir)
+
+            fname = f'{now}.pkl'.replace(' ', '_')
+            target = f'{loop_dir}{fname}'
+            with open(target, 'wb') as file:
+                pickle.dump(synthobj, file)
+                file.close()
+
+        return synthobj, target
 
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
