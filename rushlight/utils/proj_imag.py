@@ -217,43 +217,19 @@ class SyntheticFilterImage():
             data[np.isnan(data)] = self.bkg_fill
 
         # Creating header using sunpy
-        if self.instr == 'xrt':
-            # Al_thick
-            header = make_fitswcs_header(data,
-                                         coordinate=self.reference_coord,
-                                         reference_pixel=self.reference_pixel,
-                                         scale=self.scale,
-                                         telescope=self.telescope,
-                                         detector=self.detector,
-                                         instrument=self.instrument,
-                                         observatory=self.observatory,
-                                         wavelength=self.wavelength,
-                                         exposure=self.exposure,
-                                         unit=self.unit,
-                                         )
+        header = make_fitswcs_header(data,
+                                     coordinate=self.reference_coord,
+                                     reference_pixel=self.reference_pixel,
+                                     scale=self.scale,
+                                     telescope=self.telescope,
+                                     detector=self.detector,
+                                     instrument=self.instrument,
+                                     observatory=self.observatory,
+                                     wavelength=self.wavelength,
+                                     exposure=self.exposure,
+                                     unit=self.unit)
 
-            #TODO: Implement proper handling of XRT filter wheel
-
-            header['EC_FW1_'] = 'Open'
-            header['EC_FW2_'] = 'Al_thick'
-            # ordered_dict.move_to_end('key5')
-            s_map = sunpy.map.Map(data, header)
-            self.synth_map = sunpy.map.sources.XRTMap(s_map.data, s_map.fits_header)
-
-        else:
-            header = make_fitswcs_header(data,
-                                         coordinate=self.reference_coord,
-                                         reference_pixel=self.reference_pixel,
-                                         scale=self.scale,
-                                         telescope=self.telescope,
-                                         detector=self.detector,
-                                         instrument=self.instrument,
-                                         observatory=self.observatory,
-                                         wavelength=self.wavelength,
-                                         exposure=self.exposure,
-                                         unit=self.unit)
-
-            self.synth_map = sunpy.map.Map(data, header)
+        self.synth_map = sunpy.map.Map(data, header)
         return self.synth_map
 
     def project_points(self, dataset=None, image=None):
