@@ -2,7 +2,7 @@ import yt
 import os
 import sys
 import numpy as np
-from scipy import ndimage #, datasets
+from scipy import ndimage  # , datasets
 
 from skimage.util import random_noise
 
@@ -23,11 +23,12 @@ from sunpy.coordinates import frames
 from sunpy.map.header_helper import make_fitswcs_header
 from sunpy.coordinates.sun import _radius_from_angular_radius
 
-class SyntheticImage():
 
+class SyntheticImage():
     """
     Template for a parent class for the Synthetic Images
     """
+
     # TODO: Should this be an abstract class? So that abstract methods can be explicitly defined in each of the
     #  inheriting classes
 
@@ -36,7 +37,6 @@ class SyntheticImage():
 
 
 class SyntheticFilterImage():
-
     """
     Load a yt readable dataset and plot synthetic image having given the instrument name and wavelength
     """
@@ -69,7 +69,7 @@ class SyntheticFilterImage():
         if self.box:
             self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
         else:
-            self.domain_width = self.data.domain_width.in_units("cm").to_astropy() #convert unyt to astropy.units
+            self.domain_width = self.data.domain_width.in_units("cm").to_astropy()  # convert unyt to astropy.units
 
         self.plot_settings = {'resolution': 512,
                               'vmin': 1e-15,
@@ -107,7 +107,6 @@ class SyntheticFilterImage():
 
         if self.plot_settings:
             self.plot_settings['cmap'] = cmap[self.instr]
-
 
     def proj_and_imag(self, plot_settings=None, view_settings=None, **kwargs):
 
@@ -182,21 +181,22 @@ class SyntheticFilterImage():
         # Define header parameters for the synthetic image
 
         # Coordinates can be passed from sunpy maps that comparisons are made width
-        self.reference_coord = kwargs.get('reference_coord', SkyCoord(0*u.arcsec, 0*u.arcsec,
-                                   obstime=self.obstime,
-                                   observer='earth',  # Temporarily 1 AU away
-                                   frame=frames.Helioprojective))
+        self.reference_coord = kwargs.get('reference_coord', SkyCoord(0 * u.arcsec, 0 * u.arcsec,
+                                                                      obstime=self.obstime,
+                                                                      observer='earth',  # Temporarily 1 AU away
+                                                                      frame=frames.Helioprojective))
 
-        self.reference_pixel = kwargs.get('reference_pixel', u.Quantity([(data.shape[1] - 1)/2.,
-            (data.shape[0] - 1)/2.], u.pixel))  # Reference pixel along each axis: Defaults to the center of data array
+        self.reference_pixel = kwargs.get('reference_pixel', u.Quantity([(data.shape[1] - 1) / 2.,
+                                                                         (data.shape[0] - 1) / 2.],
+                                                                        u.pixel))  # Reference pixel along each axis: Defaults to the center of data array
 
         asec2cm = _radius_from_angular_radius(1. * u.arcsec, 1 * u.AU).to(u.cm)  # centimeters per arcsecond at 1 AU
         resolution = self.plot_settings['resolution']
         domain_size = self.domain_width.max()
-        len_asec = (domain_size/asec2cm).value
-        scale_ = [len_asec/resolution, len_asec/resolution]
+        len_asec = (domain_size / asec2cm).value
+        scale_ = [len_asec / resolution, len_asec / resolution]
 
-        self.scale = kwargs.get('scale', u.Quantity(scale_, u.arcsec/u.pixel))
+        self.scale = kwargs.get('scale', u.Quantity(scale_, u.arcsec / u.pixel))
         self.telescope = kwargs.get('telescope', 'EIT')
         self.observatory = kwargs.get('observatory', 'SOHO')
         self.detector = kwargs.get('detector', 'Synthetic')
@@ -207,29 +207,53 @@ class SyntheticFilterImage():
             self.wavelength = kwargs.get('wavelength', None)
         self.exposure = kwargs.get('exposure', None)
         self.unit = kwargs.get('unit', None)
-        
+
         self.poisson = kwargs.get('poisson', None)
         if self.poisson:
-            data = 0.5*np.max(self.image) * random_noise(self.image / (0.5*np.max(self.image)), mode='poisson')
+            data = 0.5 * np.max(self.image) * random_noise(self.image / (0.5 * np.max(self.image)), mode='poisson')
 
         if self.bkg_fill:
             data[data <= 0] = self.bkg_fill
             data[np.isnan(data)] = self.bkg_fill
 
         # Creating header using sunpy
-        header = make_fitswcs_header(data,
-                                     coordinate=self.reference_coord,
-                                     reference_pixel=self.reference_pixel,
-                                     scale=self.scale,
-                                     telescope=self.telescope,
-                                     detector=self.detector,
-                                     instrument=self.instrument,
-                                     observatory=self.observatory,
-                                     wavelength=self.wavelength,
-                                     exposure=self.exposure,
-                                     unit=self.unit)
+        if self.instr == 'xrt':
+            # Al_thick
+            header = make_fitswcs_header(data,
+                                         coordinate=self.reference_coord,
+                                         reference_pixel=self.reference_pixel,
+                                         scale=self.scale,
+                                         telescope=self.telescope,
+                                         detector=self.detector,
+                                         instrument=self.instrument,
+                                         observatory=self.observatory,
+                                         wavelength=self.wavelength,
+                                         exposure=self.exposure,
+                                         unit=self.unit,
+                                         )
 
-        self.synth_map = sunpy.map.Map(data, header)
+            # TODO: Implement proper handling of XRT filter wheel
+
+            header['EC_FW1_'] = 'Open'
+            header['EC_FW2_'] = 'Al_thick'
+            # ordered_dict.move_to_end('key5')
+            s_map = sunpy.map.Map(data, header)
+            self.synth_map = sunpy.map.sources.XRTMap(s_map.data, s_map.fits_header)
+
+        else:
+            header = make_fitswcs_header(data,
+                                         coordinate=self.reference_coord,
+                                         reference_pixel=self.reference_pixel,
+                                         scale=self.scale,
+                                         telescope=self.telescope,
+                                         detector=self.detector,
+                                         instrument=self.instrument,
+                                         observatory=self.observatory,
+                                         wavelength=self.wavelength,
+                                         exposure=self.exposure,
+                                         unit=self.unit)
+
+            self.synth_map = sunpy.map.Map(data, header)
         return self.synth_map
 
     def project_points(self, dataset=None, image=None):
@@ -240,15 +264,13 @@ class SyntheticFilterImage():
         :return: x, y -- pixels on which the point inside synthetic datacube projects to
         """
         if dataset is None:
-            dataset = self.data #self.region
+            dataset = self.data  # self.region
         if image is None:
             image = self.image
 
         # Create a dummy PlotMPL plot that will take data and coord system from the initial dataset
 
         # Use yt function sanitize_coord_system to export x, y values of the point in the image plane
-
-
 
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
@@ -266,14 +288,14 @@ class SyntheticFilterImage():
         """).format(inst=self.instr,
                     wave=self.channel)
 
-#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
+
+# TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
 # so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
 # Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
 # IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
 # Or just inherit from SyntheticFilterImage (?)
 
 class SyntheticBandImage():
-
     """
     Class to store synthetic X-ray images generated in a given *energy band*, such as ones from RHESSI.
     """
