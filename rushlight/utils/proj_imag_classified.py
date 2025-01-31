@@ -77,9 +77,12 @@ class SyntheticImage(ABC):
         # Header data
         instr = self.ref_img.instrument.split(' ')[0].lower()
         self.instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
-        self.channel = kwargs.get('channel', "Ti-poly" if 
-                                  (instr.lower() == 'xrt' or instr.lower() == 'defaultinstrument') 
-                                  else 171)
+        self.channel = self.ref_img.meta.get('wavelnth', 171)  # Default channel for AIA
+        if self.instr == 'secchi' and self.channel == 195:
+            self.channel = 193
+        if self.instr == 'xrt' or self.instr == 'defaultinstrument':
+            self.channel = kwargs.get('channel', 'Ti-poly')
+
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
 
         self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
@@ -146,6 +149,8 @@ class SyntheticImage(ABC):
 
         # Loop Parameters
         self.radius = 10.0 * u.Mm
+        self.majax = 10.0 * u.Mm
+        self.minax = 10.0 * u.Mm
         self.height = 0.0 * u.Mm
         self.phi0 = 0.0 * u.deg
         self.theta0 = 0.0 * u.deg
@@ -156,7 +161,13 @@ class SyntheticImage(ABC):
         if 'pkl' in kwargs:
             if isinstance(kwargs.get('pkl') , dict):
                 self.dims = kwargs.get('pkl')
-                self.radius = self.dims['radius']
+
+                try:
+                    self.radius = self.dims['radius']
+                except:
+                    self.majax = self.dims['majax']
+                    self.minax = self.dims['majax']
+
                 self.height = self.dims['height']
                 self.phi0 = self.dims['phi0']
                 self.theta0 = self.dims['theta0']
@@ -166,8 +177,13 @@ class SyntheticImage(ABC):
             else:
                 with open(kwargs.get('pkl'), 'rb') as f:
                     self.dims = pickle.load(f)
-                    # print(f'Loop dimensions loaded:{dims}')
-                    self.radius = self.dims['radius']
+                    
+                    try:
+                        self.radius = self.dims['radius']
+                    except:
+                        self.majax = self.dims['majax']
+                        self.minax = self.dims['majax']
+
                     self.height = self.dims['height']
                     self.phi0 = self.dims['phi0']
                     self.theta0 = self.dims['theta0']
@@ -180,6 +196,8 @@ class SyntheticImage(ABC):
 
             # Set the loop parameters using the provided values or default values
             self.radius = kwargs.get('radius', self.radius)
+            self.majax = kwargs.get('majax', self.majax)
+            self.minax = kwargs.get('minax', self.minax)
             self.height = kwargs.get('height', self.height)
             self.phi0 = kwargs.get('phi0', self.phi0)
             self.theta0 = kwargs.get('theta0', self.theta0)
@@ -188,6 +206,8 @@ class SyntheticImage(ABC):
             self.samples_num = kwargs.get('samples_num', self.samples_num)
 
             self.dims = {
+                'majax':        self.majax, 
+                'minax':        self.minax,
                 'radius':       self.radius,
                 'height':       self.height,
                 'phi0':         self.radius,
@@ -398,7 +418,7 @@ class SyntheticImage(ABC):
         :return: Synthetic map object, normvector, northvector, and image shift
         :rtype: tuple
         """
-        self.synth_map.plot_settings['norm'] = colors.LogNorm(10, self.ref_img.max())
+        self.synth_map.plot_settings['norm'] = colors.LogNorm(0.1, self.ref_img.max())
         self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
 
         if fig:
@@ -480,11 +500,18 @@ class SyntheticImage(ABC):
         if self.instr == 'xrt':
             imaging_model = xrt.XRTModel("temperature", "density", self.channel)
             cmap['xrt'] = color_tables.xrt_color_table()
-        elif self.instr == 'aia' or self.instr == 'secchi':
-            self.instr = 'aia'
+        elif self.instr == 'aia':
             imaging_model = uv.UVModel("temperature", "density", self.channel)
             try:
                 cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
+            except ValueError:
+                raise ValueError("AIA wavelength should be one of the following:"
+                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+        elif self.instr == 'secchi':
+            self.instr = 'aia'  # Band-aid for lack of different UV model
+            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            try:
+                cmap['aia'] = color_tables.euvi_color_table(int(self.channel) * u.angstrom)
             except ValueError:
                 raise ValueError("AIA wavelength should be one of the following:"
                                  "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
