@@ -77,14 +77,14 @@ class SyntheticImage(ABC):
         # Header data
         instr = self.ref_img.instrument.split(' ')[0].lower()
         self.instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
-        if self.instr == 'aia' or (self.instr == 'secchi' and self.channel != 195):
+        if self.instr == 'aia' or self.instr == 'secchi':
             channel_from_meta = self.ref_img.meta.get('wavelnth', 171)  # Default channel for AIA
             self.channel = kwargs.get('channel', channel_from_meta)
-        elif self.instr == 'secchi' and self.channel == 195:
-            # Exception for STEREO not having 193 channel
-            self.channel = 193
         elif self.instr == 'xrt' or self.instr == 'defaultinstrument':
             self.channel = kwargs.get('channel', 'Ti-poly')
+        if self.instr == 'secchi' and self.channel == 195:
+            # Exception for STEREO not having 193 channel
+            self.channel = 193
 
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
 
