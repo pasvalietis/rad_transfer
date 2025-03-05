@@ -3,10 +3,9 @@
 # through rushlight class objects
 
 import numpy as np
-from scipy import ndimage #, datasets
+from scipy import ndimage
 
 import yt
-from yt.frontends.ytdata.data_structures import YTGridDataset
 from yt.utilities.orientation import Orientation
 yt.set_log_level(50)
 
@@ -22,13 +21,11 @@ import matplotlib.colors as colors
 
 import sunpy.map
 from sunpy.map.map_factory import MapFactory
-from sunpy.map.mapbase import GenericMap, SpatialPair
-from sunpy.coordinates import frames, Heliocentric
+from sunpy.coordinates import frames
 from sunpy.map.header_helper import make_fitswcs_header
 from sunpy.coordinates.sun import _radius_from_angular_radius
 
-from astropy.coordinates import SkyCoord, CartesianRepresentation, spherical_to_cartesian as stc
-from astropy.units import Quantity
+from astropy.coordinates import SkyCoord, CartesianRepresentation
 from astropy.time import Time, TimeDelta
 import astropy.constants as const
 
@@ -37,11 +34,11 @@ import textwrap
 import os
 import sys
 sys.path.insert(1, config.CLB_PATH)
-from CoronalLoopBuilder.builder import CoronalLoopBuilder, semi_circle_loop, circle_3d # type: ignore
+from CoronalLoopBuilder.builder import semi_circle_loop # type: ignore
 from unyt import unyt_array
 
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from abc import ABC
 
 ###############################################################
 # Filter Images Classes
