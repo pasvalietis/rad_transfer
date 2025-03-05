@@ -59,7 +59,7 @@ class SyntheticImage(ABC):
     Parent class for generating synthetic images
     """
 
-    def __init__(self, dataset = None, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+    def __init__(self, dataset = None, smap_path: str=None, smap=None, **kwargs):
         """Object to contain all of the elements of the synthetic image and simulated flare
 
         :param dataset: Either PATH to the local simulated dataset or a loaded yt object
@@ -945,7 +945,7 @@ class SyntheticImage(ABC):
 @dataclass
 class SyntheticFilterImage(SyntheticImage):
     """ For UV and Soft Xrays """
-    def __init__(self, dataset=None, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
+    def __init__(self, dataset=None, smap_path: str=None, smap=None, **kwargs):
         super().__init__(dataset, smap_path, smap, **kwargs)
 
 @dataclass
@@ -1013,7 +1013,7 @@ class SyntheticBandImage():
             imaging_model = xray_bremsstrahlung.ThermalBremsstrahlungModel
 
         imaging_model.make_intensity_fields(self.data)
-        field = 'xray_' + str(emin) + '_' + str(emax) + '_keV_band'
+        field = 'xray_' + str(self.emin) + '_' + str(self.emax) + '_keV_band'
         self.__imag_field = field
 
 ###############################################
