@@ -71,10 +71,19 @@ class SyntheticImage(ABC):
         :raises Exception: _description_
         """        
 
+        # Attributes properties of the synthetic loop to the Synthetic Object 
+        self.radius, self.majax, self.minax, self.height, self.phi0, \
+        self.theta0, self.el, self.az, self.samples_num, self.lat, self.lon \
+        = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        self.dims = {}
         self.set_loop_params(**kwargs)
+
+        # Initializes self.ref_img as either a provided sunpy map
+        # or as a generated default map
+        self.ref_img = None
         self.set_reference_image(smap_path, smap, **kwargs)
 
-        # Header data
+        # Properties extracted from the header metadata of the reference image
         instr = self.ref_img.instrument.split(' ')[0].lower()
         self.instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
         if self.instr == 'aia' or self.instr == 'secchi':
@@ -83,20 +92,20 @@ class SyntheticImage(ABC):
         elif self.instr == 'xrt' or self.instr == 'defaultinstrument':
             self.channel = kwargs.get('channel', 'Ti-poly')
         if self.instr == 'secchi' and self.channel == 195:
-            # Exception for STEREO not having 193 channel
-            self.channel = 193
-
+            self.channel = 193 # Exception for STEREO not having 193 channel
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
 
+        # Calculation of the CLB loop properties, including the normvector and northvector
+        # used to align the MHD box
         self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
         self.calc_vect(**kwargs)
-
-        self.view_settings = {'normal_vector': self.normvector,  # pass vectors as mutable arguments
+        
+        # Group the normal and north vectors in self.view_settings
+        self.view_settings = {'normal_vector': self.normvector,
                               'north_vector': self.northvector}
 
-        # Load subsampled 3D MHD file
-        shen_datacube = config.SIMULATIONS['DATASET']
-
+        # Initialize the 3D MHD file to be used for synthetic image
+        shen_datacube = config.SIMULATIONS['DATASET']   # Default datacube TODO make this generic
         if dataset:
             if isinstance(dataset, str):
                     self.data = yt.load(dataset)
@@ -111,28 +120,33 @@ class SyntheticImage(ABC):
             print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
         
-        # Crop MHD file
+        # Crop MHD file TODO make this automatic?
         center = [0.0, 0.5, 0.0]
         left_edge = [-0.5, 0.016, -0.25]
         right_edge = [0.5, 1.0, 0.25]
-
         self.box = self.data.region(center=kwargs.get('center', center),
                                 left_edge=kwargs.get('left_edge', left_edge),
                                 right_edge=kwargs.get('right_edge', right_edge))
+        
+        # Define self.domain_width for later reference
         self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
 
-        # Observation time
+        # Determine synthetic observation time with respect to observation time
         self.timescale = kwargs.get('timescale', 109.8)
         timestep = self.data.current_time.value.item()
         timediff = TimeDelta(timestep * self.timescale * u.s)
         start_time = Time(self.ref_img.reference_coordinate.obstime, scale='utc', format='isot')
         self.synth_obs_time = start_time + timediff
-        # print('obstime:', self.synth_obs_time)
-        self.obstime = kwargs.get('obstime', self.synth_obs_time)  # Observation time
+        self.obstime = kwargs.get('obstime', self.synth_obs_time)  # Can manually specify synthetic box observation time
 
+        # Determines the number of pixels required to shift the synthetic image
+        # to align MHD origin with loop foot midpoint. Additionally, determines
+        # the lower left pixel of the synthetic image, relative to the lower left pixel
+        # of the ref_image.
         self.zoom, self.image_shift = (None, None)
         self.diff_roll(**kwargs)
 
+        # Aesthetic settings for the creation of the synthetic image
         self.plot_settings = {'resolution': self.ref_img.data.shape[0],
                               'vmin': kwargs.get('vmin', 1e-15),
                               'vmax': kwargs.get('vmax', 1e6),
@@ -143,12 +157,16 @@ class SyntheticImage(ABC):
                               'frame': None,
                               'label': None}
 
+
         self.__imag_field, self.image = (None, None)
         self.proj_and_imag(**kwargs)
 
         self.make_synthetic_map(**kwargs)
     
     def set_loop_params(self, **kwargs):
+        '''
+        Initializes the properties of the CLB loop required to position and orient the MHD cube
+        '''
 
         # Loop Parameters
         self.radius = 10.0 * u.Mm
@@ -223,9 +241,15 @@ class SyntheticImage(ABC):
         self.lat = self.theta0
         self.lon = self.phi0
 
-    def set_reference_image(self, smap_path: str=None, smap: sunpy.map.Map=None, **kwargs):
-        # Reference Image
-        self.ref_img = None
+    def set_reference_image(self, smap_path: str=None, smap=None, **kwargs):
+        '''
+        Either loads the reference image from the provided sunpy map path, or generates
+        a dummy map
+
+        :param smap_path: Path to pickled sunpy map object
+        :type smap_path: str
+        :param smap: Pre-loaded sunpy map object  
+        '''
 
         # Retrieve reference image (ref_img)
         try:
