@@ -11,6 +11,10 @@ Welcome to Rushlight's documentation!
    :caption: Modules:
 
    proj_imag_classified
+   color_tables
+   uv
+   xrt
+   xray_bremsstrahlung
 
 .. toctree::
    :maxdepth: 1

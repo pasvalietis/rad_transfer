@@ -1,6 +1,7 @@
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here.
 import sys
+from datetime import datetime
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, '/home/gabriel/rad_transfer')
@@ -15,7 +16,7 @@ sys.path.insert(0, '/home/gabriel/rad_transfer/rushlight/user_notebooks')
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'Rushlight'
-copyright = '2024, Ivan Oparin, Sabastian Fernandes'
+copyright = f'{datetime.now().year}, Ivan Oparin, Sabastian Fernandes'
 author = 'Ivan Oparin, Sabastian Fernandes'
 release = '0.1.dev'
 
