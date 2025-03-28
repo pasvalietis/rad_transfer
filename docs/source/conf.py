@@ -38,4 +38,5 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = "classic"
-# html_static_path = ['_static']
+html_static_path = ['_static']
+html_logo = "_static/rushlight_logo_cr.png"
