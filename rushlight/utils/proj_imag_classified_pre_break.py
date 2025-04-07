@@ -12,7 +12,6 @@ yt.set_log_level(50)
 from rushlight.config import config
 from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
 from rushlight.visualization.colormaps import color_tables
-from rushlight.utils import synth_tools as st
 
 from skimage.util import random_noise
 
@@ -96,9 +95,7 @@ class SyntheticImage(ABC):
         # Calculation of the CLB loop properties, including the normvector and northvector
         # used to align the MHD box
         self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-        
-        self.loop_coords = st.get_loop_coords(self.dims)
-        self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
+        self.calc_vect(**kwargs)
         
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
@@ -268,6 +265,114 @@ class SyntheticImage(ABC):
 
             # raise Exception('Please provide:', '\n a) A sunpy map object',
             # '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
+
+    def calc_vect(self, **kwargs):
+        """Calculates the north and normal vectors for the synthetic image
+
+        :raises Exception: Null reference to kwargs member
+        :return: norm, north, lat, lon, radius, height, ifpd
+        :rtype: tuple (list, list, Quantity, Quantity, Quantity, Quantity, float)
+        """    
+
+        # Define the vectors v1 and v2 (from center of sun to footpoints)
+        try:
+            self.loop_coords = semi_circle_loop(self.radius, 0, 0, False, self.height, self.theta0, self.phi0, self.el, self.az, self.samples_num)[0].cartesian
+        except:
+            print("Error handled: Your CLB does not support semicircles \n")
+            self.loop_coords = semi_circle_loop(self.radius, self.height, self.theta0, self.phi0, self.el, self.az, self.samples_num)[0].cartesian
+
+        v1 = np.array([self.loop_coords[0].x.value, 
+                    self.loop_coords[0].y.value,
+                    self.loop_coords[0].z.value])
+        
+        v2 = np.array([self.loop_coords[-1].x.value, 
+                    self.loop_coords[-1].y.value,
+                    self.loop_coords[-1].z.value])
+        
+        v3 = np.array([self.loop_coords[int(self.loop_coords.shape[0]/2.)].x.value, 
+                    self.loop_coords[int(self.loop_coords.shape[0]/2.)].y.value,
+                    self.loop_coords[int(self.loop_coords.shape[0]/2.)].z.value])
+
+        # Inter-FootPoint distance
+        v_12 = v1-v2  # x-direction in mhd frame
+        self.ifpd = np.linalg.norm(v_12)
+
+        # vectors going from footpoint to top of loop
+        v1_loop = v3 - v1
+        v2_loop = v3 - v2
+
+        # Use the cross product to determine the orientation of the loop plane
+        cross_product = np.cross(v1_loop, v2_loop) # z-direction in mhd frame
+
+        # Normal Vector
+        norm0 = cross_product / np.linalg.norm(cross_product)
+
+        # Defining MHD base coordinate system
+        z_mhd = norm0
+        x_mhd = v_12 / np.linalg.norm(v_12)
+        zx_cross = np.cross(z_mhd, x_mhd)
+        y_mhd = zx_cross / np.linalg.norm(zx_cross)
+        
+        # Transformation matrix from stonyhurst to MHD coordinates
+
+        mhd_in_stonyh = np.column_stack((x_mhd, y_mhd, z_mhd))
+        stonyh_to_mhd = np.linalg.inv(mhd_in_stonyh)            
+
+        los_vector_obs = SkyCoord(CartesianRepresentation(0*u.Mm, 0*u.Mm, -1*u.Mm),
+                            obstime=self.ref_img.coordinate_frame.obstime,
+                            observer=self.ref_img.coordinate_frame.observer,
+                            frame="heliocentric")
+        
+        imag_rot_matrix = self.ref_img.rotation_matrix
+        
+        cam_default = np.array([0, 1])
+        cam_pt = np.dot(imag_rot_matrix, cam_default)  # camera pointing
+        
+        camera_north_obs = SkyCoord(CartesianRepresentation(cam_pt[0]*u.Mm, 
+                                                            cam_pt[1]*u.Mm, 
+                                                            0*u.Mm),
+                            obstime=self.ref_img.coordinate_frame.obstime,
+                            observer=self.ref_img.coordinate_frame.observer,
+                            frame="heliocentric")
+        
+        los_vector = los_vector_obs.transform_to('heliographic_stonyhurst')
+        camera_north = camera_north_obs.transform_to('heliographic_stonyhurst')
+
+        los_vector_cart = np.array([los_vector.cartesian.x.value,
+                                    los_vector.cartesian.y.value,
+                                    los_vector.cartesian.z.value])
+        
+        camera_north_cart = np.array([camera_north.cartesian.x.value,
+                                    camera_north.cartesian.y.value,
+                                    camera_north.cartesian.z.value])
+        
+        los_vec = los_vector_cart / np.linalg.norm(los_vector_cart)
+        camera_vec = camera_north_cart / np.linalg.norm(camera_north_cart)
+        
+        norm_vec = np.dot(stonyh_to_mhd, los_vec).T
+        norm_vec = norm_vec / np.linalg.norm(norm_vec)
+        
+        north_vec = np.dot(stonyh_to_mhd, camera_vec).T
+        north_vec = north_vec / np.linalg.norm(north_vec)
+
+        # Inverting y component of the north vector in the MHD reference frame
+        north_vec[1] = - north_vec[1]
+
+        # print("\nNorm:")
+        # print(norm_vec)
+        
+        # DEFAULT: CAMERA UP
+        default = False
+        if default:
+            north = [0, 1., 0] 
+            north_vec = np.array(north)
+        
+        # print("North:")
+        # print(north_vec)
+        # print("\n")
+
+        self.northvector = north_vec
+        self.normvector = norm_vec
 
     def diff_roll(self, **kwargs):
         """Calculate amount to shift image by difference between observed foot midpoint
