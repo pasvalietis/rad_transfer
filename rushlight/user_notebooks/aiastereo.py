@@ -158,7 +158,7 @@ def approx_stereo(stereo_result, wav):
     mins += 10
     print(f'No AIA in stereo range! \nAttempting search in {mins}-minute window...\n')
     time = apply_time_window(stereo_result, mins)
-    aia_result = Fido.search(time, a.Instrument.aia, a.Sample(1*u.minute), a.Physobs('Intensity'), wav)
+    aia_result = Fido.search(time, a.Instrument('AIA'), a.Sample(1*u.minute), a.Physobs('Intensity'), wav)
     n_aia = aia_result.__dict__['_numfile']
   
   return aia_result
@@ -256,11 +256,11 @@ def calc_lims(crop_lims, roi_map):
 
     return roi_map.wcs.world_to_pixel(lims)
 
-def plot_aia_los(ax, aia_map, **kwargs):
+def plot_los(ax, m_ref, m, **kwargs):
     
     # Extracting data from the map
-    time = aia_map.reference_coordinate.obstime         # Time of Observation
-    observer = aia_map.reference_coordinate.observer    # Observer location (HGS)
+    time = m_ref.reference_coordinate.obstime         # Time of Observation
+    observer = m_ref.reference_coordinate.observer    # Observer location (HGS)
 
     # Define various frames
     hgs_frame = frames.HeliographicStonyhurst(obstime=time)     # Heliographic Stonyhurst frame
@@ -361,7 +361,13 @@ def plot_aia_los(ax, aia_map, **kwargs):
         frame=hgs_frame
     ).transform_to(hpj_frame)
 
-    ax.plot_coord(los, linestyle='--', color='k', lw=1)
+    linestyle=kwargs.get('linestyle', '-')
+    color=kwargs.get('color', 'r')
+    lw=kwargs.get('lw', '2')
+
+    ax.plot_coord(los, linestyle=linestyle, color=color, lw=lw)
+
+    adj_plotlim(m, ax)
 
     return los
 
@@ -383,6 +389,8 @@ def color_slice(ax, m, los1, los2, **kwargs):
     y2[1] = m2 * (x[1]-los2_pix[0][0]) + los2_pix[1][0]
 
     ax.fill_between(x, y1, y2, **kwargs)
+
+    adj_plotlim(m, ax)
 
     return ax
 
@@ -866,8 +874,11 @@ def plot_edges(ax, m, sfiObj, **kwargs):
     ])
     box_res = 1.4 * u.Mm
 
+    lon = sfiObj.lon
+    lat = sfiObj.lat
+
     frame_obs = Helioprojective(observer=observer, obstime=time)
-    box_origin = SkyCoord(lon=93 * u.deg, lat=-14 * u.deg, radius=696 * u.Mm, #TODO get from sfiObj
+    box_origin = SkyCoord(lon=lon, lat=lat, radius=696 * u.Mm,
                     frame='heliographic_stonyhurst',
                     observer=observer, obstime=time)
     frame_hcc = Heliocentric(observer=box_origin, obstime=time)
@@ -943,3 +954,12 @@ def plot_edges(ax, m, sfiObj, **kwargs):
       ax.text(bexpix[0] + xoff, bexpix[1], 'z', color='black', fontsize=fs)
       ax.text(beypix[0] + xoff, beypix[1], 'x', color='black', fontsize=fs)
 
+def adj_plotlim(m, ax):
+   
+  xlims_world = [m.bottom_left_coord.Tx.value, m.top_right_coord.Tx.value]*u.arcsec
+  ylims_world = [m.bottom_left_coord.Ty.value, m.top_right_coord.Ty.value]*u.arcsec
+  world_coords = SkyCoord(Tx=xlims_world, Ty=ylims_world, frame=m.coordinate_frame)
+  pixel_coords_x, pixel_coords_y = m.wcs.world_to_pixel(world_coords)
+
+  ax.set_xlim(pixel_coords_x)
+  ax.set_ylim(pixel_coords_y)

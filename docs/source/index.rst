@@ -37,6 +37,7 @@ Rushlight can be used to create synthetic observations and sunpy map objects com
    eg_aia_stereo_fetch
    eg_aia_stereo_pair
    eg_clb_loop
+   eg_synth_proj
 
 .. Check out the :doc:`usage` section for further information, including how to :ref:`install <installation>` the project.
 
