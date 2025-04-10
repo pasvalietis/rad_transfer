@@ -78,8 +78,7 @@ class SyntheticImage(ABC):
 
         # Initializes self.ref_img as either a provided sunpy map
         # or as a generated default map
-        self.ref_img = None
-        self.set_reference_image(smap_path, smap, **kwargs)
+        self.ref_img = st.get_reference_image(smap_path, smap, **kwargs)
 
         # Properties extracted from the header metadata of the reference image
         instr = self.ref_img.instrument.split(' ')[0].lower()
@@ -96,7 +95,6 @@ class SyntheticImage(ABC):
         # Calculation of the CLB loop properties, including the normvector and northvector
         # used to align the MHD box
         self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-        
         self.loop_coords = st.get_loop_coords(self.dims)
         self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
         
@@ -165,109 +163,51 @@ class SyntheticImage(ABC):
     
     def set_loop_params(self, **kwargs):
         '''
-        Initializes the properties of the CLB loop required to position and orient the MHD cube
+        Initializes the properties of the CLB loop required to position and orient the MHD cube.
+
+        :param pkl: Path to a pickle file containing loop parameters. If provided, other keyword arguments are ignored.
+        :type pkl: str, optional
+        :param radius: Radius of the circular loop. Used if the loop is circular.
+        :type radius: float, optional
+        :param majax: Semi-major axis of the elliptical loop. Used if the loop is elliptical.
+        :type majax: float, optional
+        :param minax: Semi-minor axis of the elliptical loop. Used if the loop is elliptical.
+        :type minax: float, optional
+        :param height: Height of the loop above the reference plane.
+        :type height: float
+        :param phi0: Initial azimuthal angle (longitude) of the loop in degrees.
+        :type phi0: float
+        :param theta0: Initial polar angle (latitude) of the loop in degrees.
+        :type theta0: float
+        :param el: Elevation angle of the loop's normal vector in degrees.
+        :type el: float
+        :param az: Azimuthal angle of the loop's normal vector in degrees.
+        :type az: float
+        :param samples_num: Number of discrete points used to represent the loop.
+        :type samples_num: int
+        :raises KeyError: If required parameters are missing and no pickle file is provided.
         '''
 
-        # Loop Parameters
-        self.radius = 10.0 * u.Mm
-        self.majax = 10.0 * u.Mm
-        self.minax = 10.0 * u.Mm
-        self.height = 0.0 * u.Mm
-        self.phi0 = 0.0 * u.deg
-        self.theta0 = 0.0 * u.deg
-        self.el = 90.0 * u.deg
-        self.az = 0.0 * u.deg
-        self.samples_num = 100
+        # Initialize self.dims (dictionary of loop_params)
+        loop_params = kwargs.get('pkl', None)
+        self.dims = st.get_loop_params(loop_params, **kwargs)
 
-        if 'pkl' in kwargs:
-            if isinstance(kwargs.get('pkl') , dict):
-                self.dims = kwargs.get('pkl')
+        # Make each element of self.dims accessible as object property
+        try:
+            self.radius = self.dims['radius']
+        except:
+            self.majax = self.dims['majax']
+            self.minax = self.dims['minax']
+        self.height = self.dims['height']
+        self.phi0 = self.dims['phi0']
+        self.theta0 = self.dims['theta0']
+        self.el = self.dims['el']
+        self.az = self.dims['az']
+        self.samples_num = self.dims['samples_num']
 
-                try:
-                    self.radius = self.dims['radius']
-                except:
-                    self.majax = self.dims['majax']
-                    self.minax = self.dims['majax']
-
-                self.height = self.dims['height']
-                self.phi0 = self.dims['phi0']
-                self.theta0 = self.dims['theta0']
-                self.el = self.dims['el']
-                self.az = self.dims['az']
-                self.samples_num = self.dims['samples_num']
-            else:
-                with open(kwargs.get('pkl'), 'rb') as f:
-                    self.dims = pickle.load(f)
-                    
-                    try:
-                        self.radius = self.dims['radius']
-                    except:
-                        self.majax = self.dims['majax']
-                        self.minax = self.dims['majax']
-
-                    self.height = self.dims['height']
-                    self.phi0 = self.dims['phi0']
-                    self.theta0 = self.dims['theta0']
-                    self.el = self.dims['el']
-                    self.az = self.dims['az']
-                    self.samples_num = self.dims['samples_num']
-                    f.close()
-        else:
-            print("No loop coord object provided! Using kwarg (or default) values... \n")
-
-            # Set the loop parameters using the provided values or default values
-            self.radius = kwargs.get('radius', self.radius)
-            self.majax = kwargs.get('majax', self.majax)
-            self.minax = kwargs.get('minax', self.minax)
-            self.height = kwargs.get('height', self.height)
-            self.phi0 = kwargs.get('phi0', self.phi0)
-            self.theta0 = kwargs.get('theta0', self.theta0)
-            self.el = kwargs.get('el', self.el)
-            self.az = kwargs.get('az', self.az)
-            self.samples_num = kwargs.get('samples_num', self.samples_num)
-
-            self.dims = {
-                'majax':        self.majax, 
-                'minax':        self.minax,
-                'radius':       self.radius,
-                'height':       self.height,
-                'phi0':         self.radius,
-                'theta0':       self.height,
-                'el':           self.radius,
-                'az':           self.height,
-                'samples_num':  self.samples_num
-            }
-        
+        # Establish aliases for lat, lon coordinates
         self.lat = self.theta0
         self.lon = self.phi0
-
-    def set_reference_image(self, smap_path: str=None, smap=None, **kwargs):
-        '''
-        Either loads the reference image from the provided sunpy map path, or generates
-        a dummy map
-
-        :param smap_path: Path to pickled sunpy map object
-        :type smap_path: str
-        :param smap: Pre-loaded sunpy map object  
-        '''
-
-        # Retrieve reference image (ref_img)
-        try:
-            if smap:
-                self.ref_img = smap
-            else:
-                try:
-                    with open(smap_path, 'rb') as f:
-                        self.ref_img = pickle.load(f)
-                        f.close()
-                except:
-                    self.ref_img = sunpy.map.Map(self.smap_path)
-        except:
-            print("No reference image provided, generating default\n")
-            self.ref_img = ReferenceImage(**kwargs).map
-
-            # raise Exception('Please provide:', '\n a) A sunpy map object',
-            # '\n b) A path to the .fits file', '\n c) A path to pickled sunpy map')
 
     def diff_roll(self, **kwargs):
         """Calculate amount to shift image by difference between observed foot midpoint
@@ -286,7 +226,7 @@ class SyntheticImage(ABC):
         ds_orientation = Orientation(norm_q, north_vector=north_q)
         synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
         synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-        synth_fpt_asec = self.code_coords_to_arcsec(synth_fpt_2d)
+        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
@@ -362,10 +302,7 @@ class SyntheticImage(ABC):
 
                     synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
                     synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-                    synth_fpt_asec = self.code_coords_to_arcsec(synth_fpt_2d,
-                                                                # center_x = 0,
-                                                                # center_y = 0
-                                                                )
+                    synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
                     ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
                     ax.plot(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'og')
                     ax.text(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'origin', color='g')
@@ -552,104 +489,6 @@ class SyntheticImage(ABC):
         self.synth_map = sunpy.map.Map(self.image, header)
 
         return self.synth_map
-    
-    def project_point_old(self, y_points):
-        """Identify pixels where three dimensional points from the original dataset are projected
-        on the image plane
-
-        :param dataset: Dataset containing 3d coordinates for ypoints, defaults to None
-        :type dataset: YTGridDataset, optional
-
-        :return: x, y -- pixels on which the point inside synthetic datacube projects to
-        """
-
-        north_q = unyt_array(self.northvector, self.data.units.code_length)
-        norm_q = unyt_array(self.normvector, self.data.units.code_length)
-        ds_orientation = Orientation(norm_q, north_vector=north_q)
-
-        synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
-        synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-        synth_fpt_asec = self.code_coords_to_arcsec(synth_fpt_2d,
-                                                    # center_x = 0,
-                                                    # center_y = 0
-                                                    )
-        ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
-
-        # Foot Midpoint from CLB
-        mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
-                    frame='heliographic_stonyhurst',
-                    observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
-        mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
-
-        # Find difference between pixel positions
-        x1 = float(mpt_pix[0])
-        y1 = float(mpt_pix[1])
-
-        # Shift and scale the synthetic coords by zoom
-        x2 = float(ori_pix[0]) * self.zoom
-        y2 = float(ori_pix[1]) * self.zoom
-
-        x = int((x1-x2))
-        y = int((y1-y2))
-
-        # Calculate displacement to bottom left corner of map
-        m = self.ref_img
-        bl_coord_x = m.bottom_left_coord.Tx
-        bl_coord_y = m.bottom_left_coord.Ty
-        bl_pix_x = (bl_coord_x / m.scale[0]).value
-        bl_pix_y = (bl_coord_y / m.scale[1]).value
-
-        # Calculate displacement to bottom left corner of map
-        c_coord_x = m.center.Tx
-        c_coord_y = m.center.Ty
-        c_pix_x = (c_coord_x / m.scale[0]).value
-        c_pix_y = (c_coord_y / m.scale[1]).value
-
-        # Sun Center
-        sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
-            frame='heliographic_stonyhurst',
-            observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
-        sc_pix = self.ref_img.wcs.world_to_pixel(sc)
-
-        sc2bl_x = float(0 - sc_pix[0])
-        sc2bl_y = float(0 - sc_pix[1])
-
-        map_ypoints_coords = []
-        for ypt in y_points['coordinates']:
-            # Convert 3d code coord to wcs pixels [centered at (0,0)?]
-            ypt_2d_code = self.coord_projection(ypt, ds_orientation)
-            ypt_2d_asec = self.code_coords_to_arcsec(ypt_2d_code,
-                                                    # center_x = 0,
-                                                    # center_y = 0
-                                                    )
-            ypt_coord_pix = self.ref_img.wcs.world_to_pixel(ypt_2d_asec)
-
-            x_shifted = (
-                        #  x
-                         + float(ypt_coord_pix[0]) * self.zoom
-                        #  + bl_pix_x
-                        #  + c_pix_y
-
-                         + sc2bl_x
-                         + self.image_shift[0]
-                         + self.start_pix[0]
-                         )
-            y_shifted = (
-                        #  y
-                         + float(ypt_coord_pix[1]) * self.zoom
-                        #  + bl_pix_y
-                        #  + c_pix_y
-
-                         + sc2bl_y
-                         + self.image_shift[1]
-                         + self.start_pix[1]
-                         )
-
-            # Save the shifted coords
-            shifted = [x_shifted, y_shifted]
-            map_ypoints_coords.append(shifted)
-
-        return map_ypoints_coords
 
     def project_point(self, y_points):
         """Identify pixels where three dimensional points from the original dataset are projected
@@ -677,7 +516,7 @@ class SyntheticImage(ABC):
         map_ypoints_coords = []
         for ypt in y_points['coordinates']:
             ypt_2d_code = self.coord_projection(ypt, ds_orientation)
-            ypt_2d_asec = self.code_coords_to_arcsec(ypt_2d_code)
+            ypt_2d_asec = st.code_coords_to_arcsec(ypt_2d_code, self.ref_img)
             ypt_coord_pix = self.ref_img.wcs.world_to_pixel(ypt_2d_asec)
 
             x_shifted = (
@@ -778,7 +617,7 @@ class SyntheticImage(ABC):
 
         return synthobj
     
-    def append_synthobj(self, target = None):    
+    def append_synthobj(self, target=None):    
         if target:
             if isinstance(target, str):
                 with open(target, 'rb') as f:
@@ -793,6 +632,7 @@ class SyntheticImage(ABC):
             print('No target! Creating empty dict...\n')
             synthobj = {}
 
+        # Appends this sfi object's information to the provided dictionary
         this_synthobj = self.save_synthobj()
         key = list(this_synthobj.keys())[0]
         value = this_synthobj[key]
