@@ -575,34 +575,6 @@ class SyntheticImage(ABC):
 
         return ret_coord
 
-    def code_coords_to_arcsec(self, code_coord: unyt_array, **kwargs):
-        """Converts coordinates in simulated datcube into arcsecond coordinates from the 
-        reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
-        and y axis is changing from 0 to 1.
-
-        :param code_coord: Requested 3D coordinates within datacube object
-        :type code_coord: unyt_array
-        :return: Arcsecond coordinates in observer's frame of reference
-        :rtype: SkyCoord
-        """    
-
-        # acquire x and y extents of the reference_image
-        # image center:
-        center_x = kwargs.get('center_x', self.ref_img.center.Tx)
-        center_y = kwargs.get('center_y', self.ref_img.center.Ty)
-
-        x_code_coord, y_code_coord = code_coord[0], code_coord[1]
-
-        resolution = self.ref_img.data.shape
-        scale = self.ref_img.scale
-
-        x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
-        y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
-
-        asec_coords = SkyCoord(x_asec, y_asec, frame=self.ref_img.coordinate_frame) #(x_asec, y_asec)
-
-        return asec_coords
-
     def save_synthobj(self):
         event_dict = {}
         event_dict['header'] = self.ref_img.fits_header

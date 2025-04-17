@@ -17,12 +17,16 @@ config_data = None
 config_parser = ConfigParser()
 pkg_dir = os.path.dirname(os.path.abspath(__file__))
 
+
 for loc in pkg_dir, os.path.expanduser("~"), os.environ.get('CONDA_PREFIX'), os.getcwd():
     try:
         with open(os.path.join(loc, "conf.ini")) as source:
             config_parser.read_file(source)
 
         config_data = config_parser
+        source.close()
+        
+        break
 
     except FileNotFoundError:
         # Check if configuration data is stored in json or yaml files in listed directories
@@ -37,6 +41,10 @@ for loc in pkg_dir, os.path.expanduser("~"), os.environ.get('CONDA_PREFIX'), os.
         except IOError:
             pass
 
+#%%
+
+
+#%%
 if config_data is None:
     raise FileNotFoundError('Configuration file is not found.')
 

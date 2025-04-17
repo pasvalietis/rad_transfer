@@ -8,11 +8,11 @@ from CoronalLoopBuilder.builder import semi_circle_loop # type: ignore
 
 import pickle
 
+import astropy
 from astropy.coordinates import SkyCoord, CartesianRepresentation
 import astropy.units as u
 
 import sunpy
-import astropy
 
 from unyt import unyt_array
 
@@ -337,3 +337,5 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     asec_coords = SkyCoord(x_asec, y_asec, frame=frame) #(x_asec, y_asec)
 
     return asec_coords
+
+
