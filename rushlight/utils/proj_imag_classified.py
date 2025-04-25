@@ -118,7 +118,7 @@ class SyntheticImage(ABC):
             print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
         
-        # Crop MHD file TODO make this automatic?
+        # TODO Remove this part of code (Crops bottom slice of box out by default)
         center = [0.0, 0.5, 0.0]
         left_edge = [-0.5, 0.016, -0.25]
         right_edge = [0.5, 1.0, 0.25]

@@ -32,6 +32,7 @@ from sunpy.coordinates import Heliocentric
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 
+#TODO can remove lso_aligned as functionality now exists within proj_imag_classified
 
 def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None, 
                   fig: plt.figure=None, plot: str=None, params=None, **kwargs):

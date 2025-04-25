@@ -23,6 +23,7 @@ from sunpy.coordinates import frames
 from sunpy.map.header_helper import make_fitswcs_header
 from sunpy.coordinates.sun import _radius_from_angular_radius
 
+#TODO Use proj imag classified instead
 
 class SyntheticImage():
     """
