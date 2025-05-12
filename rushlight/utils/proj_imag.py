@@ -74,7 +74,7 @@ class SyntheticFilterImage():
         self.plot_settings = {'resolution': 512,
                               'vmin': 1e-15,
                               'vmax': 1e6,
-                              'cmap': 'inferno',
+                              #'cmap': 'inferno',
                               'logscale': True,
                               'figpath': './prj_plt.png',
                               'frame': None,
@@ -82,7 +82,7 @@ class SyntheticFilterImage():
 
     def make_filter_image_field(self, **kwargs):
 
-        cmap = {}
+        #cmap = {}
         imaging_model = None
         instr_list = ['xrt', 'aia']
 
@@ -91,22 +91,22 @@ class SyntheticFilterImage():
 
         if self.instr == 'xrt':
             imaging_model = xrt.XRTModel("temperature", "density", self.channel)
-            cmap['xrt'] = color_tables.xrt_color_table()
+            #cmap['xrt'] = color_tables.xrt_color_table()
         if self.instr == 'aia':
             imaging_model = uv.UVModel("temperature", "density", self.channel)
-            try:
-                cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
-            except ValueError:
-                raise ValueError("AIA wavelength should be one of the following:"
-                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+            # try:
+            #     #cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
+            # except ValueError:
+            #     raise ValueError("AIA wavelength should be one of the following:"
+            #                      "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
 
         imaging_model.make_intensity_fields(self.data)
 
         field = str(self.instr) + '_filter_band'
         self.__imag_field = field
 
-        if self.plot_settings:
-            self.plot_settings['cmap'] = cmap[self.instr]
+        # if self.plot_settings:
+        #     self.plot_settings['cmap'] = cmap[self.instr]
 
     def proj_and_imag(self, plot_settings=None, view_settings=None, **kwargs):
 
@@ -208,6 +208,8 @@ class SyntheticFilterImage():
         self.exposure = kwargs.get('exposure', None)
         self.unit = kwargs.get('unit', None)
 
+
+
         self.poisson = kwargs.get('poisson', None)
         if self.poisson:
             data = 0.5 * np.max(self.image) * random_noise(self.image / (0.5 * np.max(self.image)), mode='poisson')
@@ -235,7 +237,7 @@ class SyntheticFilterImage():
             # TODO: Implement proper handling of XRT filter wheel
 
             header['EC_FW1_'] = 'Open'
-            header['EC_FW2_'] = 'Al_thick'
+            header['EC_FW2_'] = self.channel.replace("-", "_")  # 'Al_thick'
             # ordered_dict.move_to_end('key5')
             s_map = sunpy.map.Map(data, header)
             self.synth_map = sunpy.map.sources.XRTMap(s_map.data, s_map.fits_header)
@@ -251,9 +253,11 @@ class SyntheticFilterImage():
                                          observatory=self.observatory,
                                          wavelength=self.wavelength,
                                          exposure=self.exposure,
-                                         unit=self.unit)
+                                         unit=self.unit,
+                                         )
 
             self.synth_map = sunpy.map.Map(data, header)
+            #self.synth_map.cmap = kwargs.get('cmap', None)
         return self.synth_map
 
     def project_points(self, dataset=None, image=None):
