@@ -32,9 +32,8 @@ from sunpy.coordinates import Heliocentric
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 
-#TODO can remove lso_aligned as functionality now exists within proj_imag_classified
 
-def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None, 
+def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=None,
                   fig: plt.figure=None, plot: str=None, params=None, **kwargs):
     """Method for plotting sunpy map of synthetic projection aligned to CLB flare loop
 
@@ -89,7 +88,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # Instrument settings for synthetic image
     instr = ref_img.instrument.split(' ')[0].lower()
     instr = kwargs.get('instr', instr).lower()  # keywords: 'aia' or 'xrt'
-    channel = kwargs.get('channel', "Ti-poly" if instr.lower() == 'xrt' else 171)
+    channel = kwargs.get('channel', None) #"Ti-poly" if instr.lower() == 'xrt' else 171)
 
     # Prepare cropped MHD data for imaging
     synth_imag = synt_img(cut_box, instr, channel)
@@ -106,11 +105,12 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
 
     # Dynamic synth plot settings
     synth_plot_settings = {'resolution': ref_img.data.shape[0],
-                           'vmin': kwargs.get('vmin', 1.),
-                           'vmax': kwargs.get('vmax', 8.e2),
-                           'norm': colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)),
-                           'cmap': 'inferno',
-                           'logscale': True}
+                           #'vmin': kwargs.get('vmin', 1.),
+                           #'vmax': kwargs.get('vmax', 8.e2),
+                           #'norm': colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)),
+                           #'cmap': 'inferno',
+                           #'logscale': True
+                           }
 
     # normvector = [0,0,1]
     # northvector = [0,1,0]
@@ -143,7 +143,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # factor 10 to convert timestep to slice number
 
     start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
-    synth_obs_time = start_time + timediff
+    synth_obs_time = start_time #+ timediff
     
     print('obstime:', synth_obs_time)
 
@@ -153,16 +153,24 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
                         observer=ref_img.reference_coordinate.observer,  # Temporarily 1 AU away
                         frame='helioprojective')#ref_img.reference_coordinate.frame) #ref_img.reference_coordinate
 
-    
+    # Passing Reference image fits file arguments to create synthetic GenericMap header
+
+    if hasattr(ref_img, 'telescope'):
+        ref_telescope = ref_img.telescope
+    else:
+        ref_telescope = ref_img.observatory
+
     map_kwargs = {'obstime': synth_obs_time,
               'reference_coord': ref_coord,
               'reference_pixel': u.Quantity(ref_img.reference_pixel), 
               'scale': u.Quantity(ref_img.scale),
-              'telescope': ref_img.detector,
+              'instrument': ref_img.instrument,
+              'telescope': ref_telescope,
               'observatory': ref_img.observatory,
               'detector': ref_img.detector,
               'exposure': ref_img.exposure_time,
               'unit': ref_img.unit,
+              'cmap': ref_img.cmap,
               'wavelength': kwargs.get('wavelength', ref_img.wavelength),
               'poisson': kwargs.get('poisson', False),
               }
@@ -178,7 +186,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
             comp.plot(axes=ax)
         elif plot == 'synth':
             # synth_map.plot_settings['norm'] = colors.LogNorm(kwargs.get('vmin', 1.), kwargs.get('vmax', 8.e2)) #colors.LogNorm(10, ref_img.max())
-            synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
+            # synth_map.plot_settings['norm'] = colors.LogNorm(10, ref_img.max())
             synth_map.plot_settings['cmap'] = color_tables.aia_color_table(int(131) * u.angstrom) # ref_img.plot_settings['cmap']
             ax = fig.add_subplot(projection=synth_map)
             synth_map.plot(axes=ax)
