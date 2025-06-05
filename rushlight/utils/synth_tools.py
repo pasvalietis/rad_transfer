@@ -312,7 +312,7 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
     and y axis is changing from 0 to 1.
 
-    :param code_coord: Requested 3D coordinates within datacube object
+    :param code_coord: Projected 2D coordinates of synthetic footpoint
     :type code_coord: unyt_array
     :param smap: Sunpy map object
     :type smap: astropy.nddata.NDData
@@ -322,20 +322,61 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     if ref_img == None:
         ref_img = get_reference_image()
 
+    # Take the center coordinates of the base image in arcseconds
     center_x = kwargs.get('center_x', ref_img.center.Tx)
     center_y = kwargs.get('center_y', ref_img.center.Ty)
 
+    # Take the resolution, scale, and coordinate frame from the base image
+    # NOTE: Synthetic Image and Reference Image scales should be identical at this point
     resolution = kwargs.get('resolution', ref_img.data.shape)
     scale = kwargs.get('scale', ref_img.scale)
     frame = kwargs.get('frame', ref_img.coordinate_frame)
 
+    # Store the code coordinate units for the anchor point of the image
+    # (Should be the foot midpoint) Must be normalized!
     x_code_coord, y_code_coord = code_coord[0], code_coord[1]
 
-    x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
-    y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
+    # NOTE subtracting anything from y_code_coord needs to be in code_units!
+    x_asec = center_x + (resolution[0] * u.pix * scale[0]) * x_code_coord
+    # x_asec = center_x + resolution[0] * scale[0] * (x_code_coord - 0.5) * u.pix
+    # y_asec = center_y + resolution[1] * scale[1] * y_code_coord * u.pix
+    y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - 0.5)
 
     asec_coords = SkyCoord(x_asec, y_asec, frame=frame) #(x_asec, y_asec)
 
     return asec_coords
 
+# From Ivan 5/29/25
+def code_coords_to_arcsec_2(code_coord, ref_image, shift, image_zoom):
+    """
+    assume x axis extents in code units are [-.5 to .5] and y axis is changing from 0 to 1.
+    """
+    # Take the resolution, scale, and pixel coordinates for 
+    # the reference image's center from the base image
+    resolution = ref_image.data.shape
+    scale = ref_image.scale
+    central_pixel = ref_image.wcs.world_to_pixel(ref_image.center)
 
+    # Store the code coordinate units for the anchor point of the image
+    # (Should be the foot midpoint)
+    x_code_coord, y_code_coord = code_coord[0], code_coord[1]
+
+    # rescale limits to 0,1 in each dimensions to compute pixel coordinates using image resolution
+    # for projected image xlim, ylim see slider_proj.py (comparison with yt-projected points)
+    x_code_coord_norm = x_code_coord + 0.5
+    y_code_coord_norm = y_code_coord
+
+    x_pix_coord = x_code_coord_norm * resolution[0]
+    y_pix_coord = y_code_coord_norm * resolution[1]
+
+    x_pix_zoomed = central_pixel[0].item() * (1. - image_zoom) + image_zoom * x_pix_coord
+    y_pix_zoomed = central_pixel[1].item() * (1. - image_zoom) + image_zoom * y_pix_coord
+
+    x_pix_shifted = x_pix_zoomed + shift[0]
+    y_pix_shifted = y_pix_zoomed + shift[1]
+
+    # resolution[0]/2 stands for the pixel coordinate of the center
+    x_asec = ref_image.center.Tx - (central_pixel[0].item() - x_pix_shifted) * u.pix * scale[0]
+    y_asec = ref_image.center.Ty - (central_pixel[1].item() - y_pix_shifted) * u.pix * scale[1]
+
+    return SkyCoord(x_asec, y_asec, frame=ref_image.coordinate_frame) #(x_asec, y_asec)

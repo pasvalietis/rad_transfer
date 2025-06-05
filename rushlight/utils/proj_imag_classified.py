@@ -6,6 +6,7 @@ import numpy as np
 from scipy import ndimage
 
 import yt
+from yt.data_objects.selection_objects.region import YTRegion
 from yt.utilities.orientation import Orientation
 yt.set_log_level(50)
 
@@ -105,29 +106,27 @@ class SyntheticImage(ABC):
         # Initialize the 3D MHD file to be used for synthetic image
         shen_datacube = config.SIMULATIONS['DATASET']   # Default datacube TODO make this generic
         if dataset:
-            if isinstance(dataset, str):
-                    self.data = yt.load(dataset)
+            if isinstance(dataset, YTRegion):
+                self.box = dataset
+                self.data = self.box.ds
+                self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
             else:
-                try:
-                    dataset.field_list
-                    self.data = dataset
-                except:
-                    print('Invalid datacube provided! Using default datacube... \n')
-                    self.data = yt.load(shen_datacube)
+                if isinstance(dataset, str):
+                    self.data = yt.load(dataset)
+                    self.box = self.data
+                else:
+                    try:
+                        dataset.field_list
+                        self.data = dataset
+                        self.box = self.data
+                    except:
+                        print('Invalid datacube provided! Using default datacube... \n')
+                        self.data = yt.load(shen_datacube)
+                        self.box = self.data
+                self.domain_width = np.abs(self.data.domain_right_edge - self.data.domain_left_edge).in_units('cm').to_astropy()
         else:
             print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
-        
-        # TODO Remove this part of code (Crops bottom slice of box out by default)
-        center = [0.0, 0.5, 0.0]
-        left_edge = [-0.5, 0.016, -0.25]
-        right_edge = [0.5, 1.0, 0.25]
-        self.box = self.data.region(center=kwargs.get('center', center),
-                                left_edge=kwargs.get('left_edge', left_edge),
-                                right_edge=kwargs.get('right_edge', right_edge))
-        
-        # Define self.domain_width for later reference
-        self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
 
         # Determine synthetic observation time with respect to observation time
         self.timescale = kwargs.get('timescale', 109.8)
@@ -158,7 +157,6 @@ class SyntheticImage(ABC):
 
         self.__imag_field, self.image = (None, None)
         self.proj_and_imag(**kwargs)
-
         self.make_synthetic_map(**kwargs)
     
     def set_loop_params(self, **kwargs):
@@ -224,9 +222,11 @@ class SyntheticImage(ABC):
         norm_q = unyt_array(self.normvector, self.data.units.code_length)
 
         ds_orientation = Orientation(norm_q, north_vector=north_q)
+        # NOTE synth origin needs to be provided by user
         synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
         synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
         synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
+        #synth_fpt_asec = st.code_coords_to_arcsec2(code_coord, self.ref_img, shift, self.zoom) #NOTE Toggling old and new methods
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
@@ -391,6 +391,7 @@ class SyntheticImage(ABC):
 
         self.make_filter_image_field()  # Create emission fields
 
+        # NOTE Why is center position offset by 0.5 in y axis? This is dataset-dependent
         prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
             self.box,
             [0.0, 0.5, 0.0],  # center position in code units
@@ -550,6 +551,8 @@ class SyntheticImage(ABC):
         """     
 
         # coord_copy should be a unyt array in code_units
+        # NOTE coord_copy.transpose() seems to do nothing to coord copy [Generic Dataset]
+        # Also, self.domain_center.v = [0,0,0], so adding does nothing
         coord_copy = coord
         coord_vectors = coord_copy.transpose() - (self.data.domain_center.v * self.data.domain_center.uq)
 
@@ -567,13 +570,31 @@ class SyntheticImage(ABC):
                 orientation = Orientation(norm_vec, north_vector=north_vec)
                 unit_vectors = orientation.unit_vectors
 
+        # NOTE if self.data.domain_center is [0,0,0], then this does nothing
         # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
-        y = np.dot(coord_vectors, unit_vectors[1]) + self.data.domain_center.value[1]
+        y = np.dot(coord_vectors, unit_vectors[1])  + self.data.domain_center.value[1]
         x = np.dot(coord_vectors, unit_vectors[0])  # * self.data.domain_center.uq
 
         ret_coord = (x, y) # (y, x)
 
         return ret_coord
+
+    def update_dir(self, norm: unyt_array=None, north: unyt_array=None):
+        
+        change = False
+        if not np.array_equal(norm, self.normvector):
+            self.normvector = norm
+            change = True
+        if not np.array_equal(north, self.northvector):
+            self.northvector = north
+            change = True
+        if change:
+            self.view_settings = {'normal_vector': self.normvector,
+                                  'north_vector': self.northvector}
+            self.proj_and_imag()
+            self.make_synthetic_map()
+
+        return norm, north
 
     def save_synthobj(self):
         event_dict = {}
