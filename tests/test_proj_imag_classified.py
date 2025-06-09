@@ -1,6 +1,7 @@
 import pytest
 import rushlight.utils.proj_imag_classified as pic
 
+#NOTE Use dummy (defuault map) dataset to test these classes
 
 @pytest.mark.xfail(reason="Testing class for proj_imag_classified not finalized")
 class TestSyntheticFilterImage:

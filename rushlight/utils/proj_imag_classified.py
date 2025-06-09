@@ -153,7 +153,7 @@ class SyntheticImage(ABC):
                               'label': None}
 
 
-        self.__imag_field, self.image = (None, None)
+        self.imag_field, self.image = (None, None)
         self.proj_and_imag(**kwargs)
         self.make_synthetic_map(**kwargs)
     
@@ -222,7 +222,7 @@ class SyntheticImage(ABC):
         ds_orientation = Orientation(norm_q, north_vector=north_q)
         # NOTE synth origin needs to be provided by user
         synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
-        synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
+        synth_fpt_2d = st.coord_projection(self.data, synthbox_origin, ds_orientation)
         synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
         #synth_fpt_asec = st.code_coords_to_arcsec2(code_coord, self.ref_img, shift, self.zoom) #NOTE Toggling old and new methods
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
@@ -265,77 +265,6 @@ class SyntheticImage(ABC):
         self.image_shift = (x,y)
         self.start_pix = (startx, starty)
 
-    def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs): 
-        """Plot the generated synthetic map in different configurations
-
-        :param fig: matplotlib figure object, defaults to None
-        :type fig: plt.figure, optional
-        :param plot: Hint for what type of plot to produce ['comp', 'synth', 'obs'], defaults to None
-        :type plot: str, optional
-        :return: Synthetic map object, normvector, northvector, and image shift
-        :rtype: tuple
-        """
-        self.synth_map.plot_settings['norm'] = colors.LogNorm(0.1, self.ref_img.max())
-        self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
-
-        if fig:
-            if plot == 'comp':
-                comp_map = sunpy.map.Map(self.ref_img, self.synth_map, composite=True)
-                
-                alpha = kwargs.get('alpha', 0.5)
-                comp_map.set_alpha(1, alpha)
-                ax = fig.add_subplot(projection=comp_map.get_map(0))
-                comp_map.plot(axes=ax)
-            elif plot == 'synth':                
-                ax = fig.add_subplot(projection=self.synth_map)
-                ax.grid(False)
-                self.synth_map.plot(axes=ax)
-
-                debug = kwargs.get('debug', False)
-                if debug:
-                    # Plot Synthetic Footpont
-                    north_q = unyt_array(self.northvector, self.data.units.code_length)
-                    norm_q = unyt_array(self.normvector, self.data.units.code_length)
-                    ds_orientation = Orientation(norm_q, north_vector=north_q)
-
-                    synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
-                    synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-                    synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
-                    ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
-                    ax.plot(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'og')
-                    ax.text(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'origin', color='g')
-
-                    # Plot Observed Footpoint
-                    mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
-                        frame='heliographic_stonyhurst',
-                        observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
-                    mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
-                    ax.plot(mpt_pix[0], mpt_pix[1], 'or')
-                    ax.text(mpt_pix[0], mpt_pix[1], 'midpoint', color='r')
-
-                    # Plot Sun center
-                    sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
-                        frame='heliographic_stonyhurst',
-                        observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
-                    sc_pix = self.ref_img.wcs.world_to_pixel(sc)
-                    ax.plot(sc_pix[0], sc_pix[1], 'oc')
-                    ax.text(sc_pix[0], sc_pix[1], 'sun center', color='c')
-
-                    # Plot (0,0) [correlates to bl of image]
-                    ax.plot(0,0,'oy')
-                    ax.text(0,0, 'bottom left', color='y')
-            elif plot == 'obs':
-                ax = fig.add_subplot(projection=self.ref_img)
-                self.ref_img.plot(axes=ax)
-            else:
-                ax = fig.add_subplot(projection=self.synth_map)
-
-            return ax, self.synth_map, self.normvector, self.northvector, self.image_shift
-
-        else:
-
-            return self.synth_map, self.normvector, self.northvector, self.image_shift
-
     def make_filter_image_field(self, **kwargs):
         """Selects and applies the correct filter image field to the synthetic dataset
 
@@ -345,41 +274,16 @@ class SyntheticImage(ABC):
         """
 
         cmap = {}
-        imaging_model = None
-        instr_list = ['xrt', 'aia', 'secchi', 'defaultinstrument']
 
-        if self.instr not in instr_list:
-            raise ValueError("instr should be in the instrument list: ", instr_list)
+        print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
+        self.instr = 'xrt'
+        imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+        cmap['xrt'] = color_tables.xrt_color_table()
 
-        if self.instr == 'xrt':
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
-            cmap['xrt'] = color_tables.xrt_color_table()
-        elif self.instr == 'aia':
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
-            try:
-                cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
-            except ValueError:
-                raise ValueError("AIA wavelength should be one of the following:"
-                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
-        elif self.instr == 'secchi':
-            self.instr = 'aia'  # Band-aid for lack of different UV model
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
-            try:
-                cmap['aia'] = color_tables.euvi_color_table(int(self.channel) * u.angstrom)
-            except ValueError:
-                raise ValueError("AIA wavelength should be one of the following:"
-                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
-        elif self.instr == 'defaultinstrument':
-            print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
-            self.instr = 'xrt'
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
-            cmap['xrt'] = color_tables.xrt_color_table()
-
-        # Adds intensity fields to the self-contained dataset
         imaging_model.make_intensity_fields(self.data)
 
         field = str(self.instr) + '_filter_band'
-        self.__imag_field = field
+        self.imag_field = field
 
         if self.plot_settings:
             self.plot_settings['cmap'] = cmap[self.instr]
@@ -407,7 +311,7 @@ class SyntheticImage(ABC):
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
             width=self.data.domain_width[0].value,  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
-            item=self.__imag_field,  # respective field that is being projected
+            item=self.imag_field,  # respective field that is being projected
             north_vector=self.view_settings['north_vector'])
 
         # transpose synthetic image (swap axes for imshow)
@@ -498,6 +402,9 @@ class SyntheticImage(ABC):
 
         self.synth_map = sunpy.map.Map(self.image, header)
 
+        self.synth_map.plot_settings['norm'] = colors.LogNorm(0.1, self.ref_img.max())
+        self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
+
         return self.synth_map
 
     def project_point(self, y_points):
@@ -525,7 +432,7 @@ class SyntheticImage(ABC):
 
         map_ypoints_coords = []
         for ypt in y_points['coordinates']:
-            ypt_2d_code = self.coord_projection(ypt, ds_orientation)
+            ypt_2d_code = st.coord_projection(self.data, ypt, ds_orientation)
             ypt_2d_asec = st.code_coords_to_arcsec(ypt_2d_code, self.ref_img)
             ypt_coord_pix = self.ref_img.wcs.world_to_pixel(ypt_2d_asec)
 
@@ -547,46 +454,6 @@ class SyntheticImage(ABC):
             map_ypoints_coords.append(shifted)
 
         return map_ypoints_coords
-
-    def coord_projection(self, coord: unyt_array, orientation: Orientation=None, **kwargs):
-        """Reproduces yt plot_modifications _project_coords functionality
-
-        :param coord: Coordinates of the point in the datacube domain
-        :type coord: unyt_array
-        :param orientation: Orientation object calculated from norm / north vector, defaults to None
-        :type orientation: Orientation, optional
-        :return: Cooordinates of the projected point from the viewing camera perspective
-        :rtype: tuple
-        """     
-
-        # coord_copy should be a unyt array in code_units
-        # NOTE coord_copy.transpose() seems to do nothing to coord copy [Generic Dataset]
-        # Also, self.domain_center.v = [0,0,0], so adding does nothing
-        coord_copy = coord
-        coord_vectors = coord_copy.transpose() - (self.data.domain_center.v * self.data.domain_center.uq)
-
-        # orientation object is computed from norm and north vectors
-        if orientation:
-            unit_vectors = orientation.unit_vectors
-        else:
-            if 'norm_vector' in kwargs:
-                norm_vector = kwargs['norm_vector']
-                norm_vec = unyt_array(norm_vector) * self.data.domain_center.uq
-            if 'north_vector' in kwargs:
-                north_vector = kwargs['north_vector']
-                north_vec = unyt_array(north_vector) * self.data.domain_center.uq
-            if 'north_vector' and 'norm_vector' in kwargs:
-                orientation = Orientation(norm_vec, north_vector=north_vec)
-                unit_vectors = orientation.unit_vectors
-
-        # NOTE if self.data.domain_center is [0,0,0], then this does nothing
-        # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
-        y = np.dot(coord_vectors, unit_vectors[1])  + self.data.domain_center.value[1]
-        x = np.dot(coord_vectors, unit_vectors[0])  # * self.data.domain_center.uq
-
-        ret_coord = (x, y) # (y, x)
-
-        return ret_coord
 
     def update_dir(self, norm: unyt_array=None, north: unyt_array=None):
         """Updates the normal and north vectors for the view settings and regenerates the image.
@@ -729,6 +596,54 @@ class SyntheticFilterImage(SyntheticImage):
     def __init__(self, dataset=None, smap_path: str=None, smap=None, **kwargs):
         super().__init__(dataset, smap_path, smap, **kwargs)
 
+    def make_filter_image_field(self):
+        """Selects and applies the correct filter image field to the synthetic dataset
+
+        :raises ValueError: Raised if filter instrument is unrecognized
+        :raises ValueError: Raised if AIA wavelength is not from valid selection 
+                            (1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335)
+        """
+
+        cmap = {}
+        imaging_model = None
+        instr_list = ['xrt', 'aia', 'secchi', 'defaultinstrument']
+
+        if self.instr not in instr_list:
+            raise ValueError("instr should be in the instrument list: ", instr_list)
+
+        if self.instr == 'xrt':
+            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            cmap['xrt'] = color_tables.xrt_color_table()
+        elif self.instr == 'aia':
+            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            try:
+                cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
+            except ValueError:
+                raise ValueError("AIA wavelength should be one of the following:"
+                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+        elif self.instr == 'secchi':
+            self.instr = 'aia'  # Band-aid for lack of different UV model
+            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            try:
+                cmap['aia'] = color_tables.euvi_color_table(int(self.channel) * u.angstrom)
+            except ValueError:
+                raise ValueError("AIA wavelength should be one of the following:"
+                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+        elif self.instr == 'defaultinstrument':
+            print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
+            self.instr = 'xrt'
+            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            cmap['xrt'] = color_tables.xrt_color_table()
+
+        # Adds intensity fields to the self-contained dataset
+        imaging_model.make_intensity_fields(self.data)
+
+        field = str(self.instr) + '_filter_band'
+        self.imag_field = field
+
+        if self.plot_settings:
+            self.plot_settings['cmap'] = cmap[self.instr]
+
 @dataclass
 class SyntheticEnergyRangeImage(SyntheticImage):
     """ For Non-thermal emission, like PyXsim """
@@ -777,7 +692,7 @@ class SyntheticBandImage():
 
         self.view_settings = {'normal_vector': (0.0, 0.0, 1.0),  # pass vectors as mutable arguments
                               'north_vector': (-0.7, -0.3, 0.0)}
-        self.__imag_field = None
+        self.imag_field = None
         self.image = None
 
         if self.box:
@@ -795,7 +710,7 @@ class SyntheticBandImage():
 
         imaging_model.make_intensity_fields(self.data)
         field = 'xray_' + str(self.emin) + '_' + str(self.emax) + '_keV_band'
-        self.__imag_field = field
+        self.imag_field = field
 
 ###############################################
 # Reference Image Classes

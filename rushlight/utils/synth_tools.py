@@ -14,10 +14,15 @@ import astropy
 from astropy.coordinates import SkyCoord, CartesianRepresentation
 import astropy.units as u
 
+from yt.utilities.orientation import Orientation
+
 ###############################################################
 
 def calc_vect(loop_coords: np.ndarray, ref_img: astropy.nddata.NDData, **kwargs):
     """Calculates the north and normal vectors for the synthetic image
+
+    #NOTE Change to accept 3 coordinates: of fpt1, of fpt2, and of loop apex
+    
 
     :param loop_coords: Coordinates of the CLB loop as an array of
                         `astropy.coordinates.SkyCoord` objects.
@@ -345,3 +350,46 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     asec_coords = SkyCoord(x_asec, y_asec, frame=frame) #(x_asec, y_asec)
 
     return asec_coords
+
+def coord_projection(data, coord: unyt_array, orientation: Orientation=None, **kwargs):
+        """Reproduces yt plot_modifications _project_coords functionality
+
+        :param coord: Coordinates of the point in the datacube domain
+        :type coord: unyt_array
+        :param orientation: Orientation object calculated from norm / north vector, defaults to None
+        :type orientation: Orientation, optional
+        :return: Cooordinates of the projected point from the viewing camera perspective
+        :rtype: tuple
+        """     
+
+        # coord_copy should be a unyt array in code_units
+        # NOTE coord_copy.transpose() seems to do nothing to coord copy [Generic Dataset]
+        # Also, domain_center.v = [0,0,0], so adding does nothing
+        coord_copy = coord
+        coord_vectors = coord_copy.transpose() - (data.domain_center.v * data.domain_center.uq)
+
+        # orientation object is computed from norm and north vectors
+        if orientation:
+            unit_vectors = orientation.unit_vectors
+        else:
+            if 'norm_vector' in kwargs:
+                norm_vector = kwargs['norm_vector']
+                norm_vec = unyt_array(norm_vector) * data.domain_center.uq
+            if 'north_vector' in kwargs:
+                north_vector = kwargs['north_vector']
+                north_vec = unyt_array(north_vector) * data.domain_center.uq
+            if 'north_vector' and 'norm_vector' in kwargs:
+                orientation = Orientation(norm_vec, north_vector=north_vec)
+                unit_vectors = orientation.unit_vectors
+
+        # NOTE if self.data.domain_center is [0,0,0], then this does nothing
+        # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
+        y = np.dot(coord_vectors, unit_vectors[1])  + data.domain_center.value[1]
+        x = np.dot(coord_vectors, unit_vectors[0])  # data.domain_center.uq
+
+        ret_coord = (x, y) # (y, x)
+
+        return ret_coord
+
+
+
