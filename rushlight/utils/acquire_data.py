@@ -1,7 +1,7 @@
 from sunpy.net import Fido
 from sunpy.net import attrs as a
 import astropy.units as u
-from astropy.time import Time, TimeDelta
+from astropy.time import Time
 from rushlight.config import config
 
 '''

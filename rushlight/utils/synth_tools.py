@@ -1,20 +1,20 @@
 import numpy as np
 
 from rushlight.config import config
-
 import sys
 sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import semi_circle_loop # type: ignore
 
 import pickle
+import sunpy
+from unyt import unyt_array
+import numpy as np
 
 import astropy
 from astropy.coordinates import SkyCoord, CartesianRepresentation
 import astropy.units as u
 
-import sunpy
-
-from unyt import unyt_array
+###############################################################
 
 def calc_vect(loop_coords: np.ndarray, ref_img: astropy.nddata.NDData, **kwargs):
     """Calculates the north and normal vectors for the synthetic image

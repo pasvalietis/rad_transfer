@@ -3,7 +3,8 @@ from astropy.coordinates import SkyCoord
 import sunpy.map
 import astropy.units as u
 
-from utils.lso_align import synthmap_plot, calc_vect
+from proj_imag_classified import SyntheticImage as sfi
+from synth_tools import calc_vect
 import pickle
 
 

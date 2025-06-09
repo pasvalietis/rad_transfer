@@ -2,6 +2,7 @@
 # This script holds the up-to-date versions of all image projection algorithms, made accessible
 # through rushlight class objects
 
+from datetime import datetime
 import numpy as np
 from scipy import ndimage
 
@@ -27,16 +28,13 @@ from sunpy.coordinates import frames
 from sunpy.map.header_helper import make_fitswcs_header
 from sunpy.coordinates.sun import _radius_from_angular_radius
 
-from astropy.coordinates import SkyCoord, CartesianRepresentation
+from astropy.coordinates import SkyCoord
 from astropy.time import Time, TimeDelta
 import astropy.constants as const
 
 import pickle
 import textwrap
 import os
-import sys
-sys.path.insert(1, config.CLB_PATH)
-from CoronalLoopBuilder.builder import semi_circle_loop # type: ignore
 from unyt import unyt_array
 
 from dataclasses import dataclass
@@ -387,7 +385,18 @@ class SyntheticImage(ABC):
             self.plot_settings['cmap'] = cmap[self.instr]
 
     def proj_and_imag(self, **kwargs):
-        """Projects the synthetic dataset and applies image zoom and shift"""
+        """Projects the synthetic dataset and applies image zoom and shift
+
+        :param bkg_fill: Value to fill the background (where image values are less than or equal to 0).
+            If None, the background is not filled.
+        :type bkg_fill: float, optional
+
+        :notes: The center position is offset by 0.5 in the y-axis, which is dataset-dependent.
+            Transposes the synthetic image to swap axes for `imshow`.
+            If `self.zoom` is set and not equal to 1, the image is zoomed out.
+            If `self.image_shift` is set, the image is shifted by the specified amounts
+            along the y and x axes, respectively.
+        """
 
         self.make_filter_image_field()  # Create emission fields
 
@@ -580,76 +589,123 @@ class SyntheticImage(ABC):
         return ret_coord
 
     def update_dir(self, norm: unyt_array=None, north: unyt_array=None):
+        """Updates the normal and north vectors for the view settings and regenerates the image.
+
+        :param norm: The new normal vector. If not provided, the current normal vector is retained.
+        :type norm: unyt_array, optional
+        :param north: The new north vector. If not provided, the current north vector is retained.
+        :type north: unyt_array, optional
+        :returns: A tuple containing the updated normal vector and north vector.
+        :rtype: tuple[unyt_array, unyt_array]
+        """
         
-        change = False
+        change = False  # Initialize a flag to track if changes occurred
         if not np.array_equal(norm, self.normvector):
-            self.normvector = norm
-            change = True
+            self.normvector = norm  # Update the normal vector
+            change = True  # Set change flag to True
         if not np.array_equal(north, self.northvector):
-            self.northvector = north
-            change = True
+            self.northvector = north  # Update the north vector
+            change = True  # Set change flag to True
         if change:
+            # Update view settings with new vectors
             self.view_settings = {'normal_vector': self.normvector,
                                   'north_vector': self.northvector}
-            self.proj_and_imag()
-            self.make_synthetic_map()
+            self.proj_and_imag()  # Re-project the image with new settings
+            self.make_synthetic_map()  # Recreate the synthetic map
 
-        return norm, north
+        return norm, north  # Return the updated vectors
 
     def save_synthobj(self):
-        event_dict = {}
-        event_dict['header'] = self.ref_img.fits_header
-        event_dict['loop_params'] = self.dims
-        event_dict['norm_vector'] = self.normvector
-        event_dict['norm_vector'] = self.northvector
+        """Saves relevant synthetic object parameters into a dictionary.
 
-        telescope = event_dict['header']['TELESCOP']
-        dateobs = event_dict['header']['DATE-OBS']
-        event_key = f'{telescope}|{dateobs}'
-        synthobj = {event_key: event_dict}
+        This method compiles key information about the synthetic object, including FITS header data
+        from the reference image, loop parameters, and view vectors, into a dictionary.
+        This dictionary is structured for easy identification using a key composed of the
+        telescope and observation date.
 
-        return synthobj
+        :returns: A dictionary containing the synthetic object's data,
+            keyed by a string combining the telescope and observation date.
+        :rtype: dict
+        """
+        event_dict = {}  # Initialize an empty dictionary to store event-related data
+        event_dict['header'] = self.ref_img.fits_header  # Store the FITS header from the reference image
+        event_dict['loop_params'] = self.dims  # Store the loop parameters (dimensions)
+        event_dict['norm_vector'] = self.normvector  # Store the normal vector
+        event_dict['north_vector'] = self.northvector  # Store the north vector 
+
+        telescope = event_dict['header']['TELESCOP']  # Extract the telescope name from the FITS header
+        dateobs = event_dict['header']['DATE-OBS']  # Extract the observation date from the FITS header
+        event_key = f'{telescope}|{dateobs}'  # Create a unique key for the event
+        synthobj = {event_key: event_dict}  # Create the final dictionary with the event key and data
+
+        return synthobj  # Return the structured synthetic object dictionary
     
-    def append_synthobj(self, target=None):    
+    def append_synthobj(self, target=None):
+        """Appends the current synthetic object's data to an existing dictionary or a new one,
+        then saves it to a file if a file path is provided or creates a new file.
+
+        :param target: The target to append to. Can be a file path (str) to a pickled dictionary,
+            an existing dictionary (dir), or None to start with an empty dictionary.
+        :type target: str or dict, optional
+        :returns: A tuple containing the updated synthetic object dictionary and the target file path.
+        :rtype: tuple[dict, str]
+        :raises TypeError: If `target` is not a string, a dictionary, or None.
+        """
+        
+        synthobj = {}  # Initialize an empty dictionary for the synthetic object data
+
+        # Load existing data if a target is provided
         if target:
             if isinstance(target, str):
-                with open(target, 'rb') as f:
-                    synthobj = pickle.load(f)
-                    f.close()
-            elif isinstance(target, dir):
+                # If target is a string, assume it's a file path and load the pickled dictionary
+                try:
+                    with open(target, 'rb') as f:
+                        synthobj = pickle.load(f)
+                except FileNotFoundError:
+                    print(f"File not found: {target}. Creating a new dictionary.")
+                    synthobj = {}
+                except Exception as e:
+                    print(f"Error loading pickle file: {e}. Creating an empty dictionary.")
+                    synthobj = {}
+            elif isinstance(target, dict):
+                # If target is already a dictionary, use it directly
                 synthobj = target
             else:
-                print('Invalid target! Creating empty dict...\n')
+                # Handle invalid target types
+                print('Invalid target type! Creating an empty dictionary.')
                 synthobj = {}
         else:
-            print('No target! Creating empty dict...\n')
+            # If no target is provided, start with an empty dictionary
+            print('No target provided! Creating an empty dictionary.')
             synthobj = {}
 
-        # Appends this sfi object's information to the provided dictionary
+        # Get the current synthetic object's information
         this_synthobj = self.save_synthobj()
+        # Extract the key and value from the current synthetic object's data
         key = list(this_synthobj.keys())[0]
         value = this_synthobj[key]
+        # Append or update the synthetic object dictionary with the current object's data
         synthobj[key] = value
 
+        # Save the updated synthetic object dictionary
         if isinstance(target, str):
+            # If the original target was a string (file path), save back to that file
             with open(target, 'wb') as file:
                 pickle.dump(synthobj, file)
-                file.close()
         else:
-            import datetime
-            now = datetime.datetime.now()
-
-            loop_dir = './loop_parameters/'
+            # If no file path was provided initially, create a new one in 'loop_parameters/'
+            now = datetime.datetime.now()  # Get current timestamp
+            loop_dir = './loop_parameters/'  # Define the directory for saving
             if not os.path.exists(loop_dir):
-                os.makedirs(loop_dir)
+                os.makedirs(loop_dir)  # Create the directory if it doesn't exist
 
-            fname = f'{now}.pkl'.replace(' ', '_')
-            target = f'{loop_dir}{fname}'
+            # Generate a unique filename using the timestamp
+            fname = f'{now}.pkl'.replace(' ', '_').replace(':', '-').replace('.', '_')
+            target = f'{loop_dir}{fname}'  # Construct the full file path
             with open(target, 'wb') as file:
                 pickle.dump(synthobj, file)
-                file.close()
 
-        return synthobj, target
+        return synthobj, target  # Return the updated dictionary and the final target path
 
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
