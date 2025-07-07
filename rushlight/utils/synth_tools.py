@@ -265,6 +265,8 @@ def get_loop_params(loop_params, **kwargs):
             'samples_num':  samples_num
         }
 
+    
+
     return loop_params_dict
 
 def get_reference_image(smap_path: str = None, smap=None, **kwargs):
@@ -341,11 +343,19 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     # (Should be the foot midpoint) Must be normalized!
     x_code_coord, y_code_coord = code_coord[0], code_coord[1]
 
+    box = kwargs.get('box')
+    # NOTE Add an exception for center property (center / domain center)
+    # NOTE Take into account scaling of bbox?
     # NOTE subtracting anything from y_code_coord needs to be in code_units!
-    x_asec = center_x + (resolution[0] * u.pix * scale[0]) * x_code_coord
+    x_asec = center_x + (resolution[0] * u.pix * scale[0]) * (x_code_coord - box.domain_center.value[0])
     # x_asec = center_x + resolution[0] * scale[0] * (x_code_coord - 0.5) * u.pix
     # y_asec = center_y + resolution[1] * scale[1] * y_code_coord * u.pix
-    y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - 0.5)
+    # y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - 0.5)
+    y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - box.domain_center.value[1])
+
+    print(box.domain_center.value[0])
+    print(box.domain_center.value[1])
+
 
     asec_coords = SkyCoord(x_asec, y_asec, frame=frame) #(x_asec, y_asec)
 
@@ -384,7 +394,7 @@ def coord_projection(data, coord: unyt_array, orientation: Orientation=None, **k
 
         # NOTE if self.data.domain_center is [0,0,0], then this does nothing
         # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
-        y = np.dot(coord_vectors, unit_vectors[1])  + data.domain_center.value[1]
+        y = np.dot(coord_vectors, unit_vectors[1]) + data.domain_center.value[1]
         x = np.dot(coord_vectors, unit_vectors[0])  # data.domain_center.uq
 
         ret_coord = (x, y) # (y, x)

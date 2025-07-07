@@ -223,7 +223,7 @@ class SyntheticImage(ABC):
         # NOTE synth origin needs to be provided by user
         synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
         synth_fpt_2d = st.coord_projection(self.data, synthbox_origin, ds_orientation)
-        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
+        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.box)
         #synth_fpt_asec = st.code_coords_to_arcsec2(code_coord, self.ref_img, shift, self.zoom) #NOTE Toggling old and new methods
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
@@ -307,7 +307,8 @@ class SyntheticImage(ABC):
         # NOTE Why is center position offset by 0.5 in y axis? This is dataset-dependent
         prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
             self.box,
-            [0.0, 0.5, 0.0],  # center position in code units
+            # [0.0, 0.5, 0.0],  # center position in code units
+            self.box.domain_center.value,
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
             width=self.data.domain_width[0].value,  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
