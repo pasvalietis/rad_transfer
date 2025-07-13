@@ -138,8 +138,8 @@ class SyntheticImage(ABC):
         # to align MHD origin with loop foot midpoint. Additionally, determines
         # the lower left pixel of the synthetic image, relative to the lower left pixel
         # of the ref_image.
-        self.zoom, self.image_shift = (None, None)
-        self.diff_roll(**kwargs)
+        # self.zoom, self.image_shift = (None, None)
+        # self.diff_roll(**kwargs)
 
         # Aesthetic settings for the creation of the synthetic image
         self.plot_settings = {'resolution': self.ref_img.data.shape[0],
@@ -318,10 +318,16 @@ class SyntheticImage(ABC):
         # transpose synthetic image (swap axes for imshow)
         self.image = np.array(prji).T
 
+        # Determines the number of pixels required to shift the synthetic image
+        # to align MHD origin with loop foot midpoint. Additionally, determines
+        # the lower left pixel of the synthetic image, relative to the lower left pixel
+        # of the ref_image.
+        self.zoom, self.image_shift = (None, None)
+        self.diff_roll(**kwargs)
+
         if self.zoom and not (self.zoom == 1):
             self.image = self.zoom_out(self.image, self.zoom)
 
-        # return self.image
         if self.image_shift:
             self.image = np.roll(self.image, (self.image_shift[0],
                                               self.image_shift[1]), axis=(1, 0))
