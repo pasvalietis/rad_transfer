@@ -290,6 +290,63 @@ class SyntheticImage(ABC):
         if self.plot_settings:
             self.plot_settings['cmap'] = cmap[self.instr]
 
+    class ImageProcessor:
+        def __init__(self, image, image_shift):
+            self.image = image
+            self.image_shift = image_shift
+
+        def roll_and_crop(self):
+            # Create the new array filled with the minimum value of the original image
+            new_arr = np.ones_like(self.image) * self.image.min()
+
+            xshift = self.image_shift[0]
+            yshift = self.image_shift[1]
+
+            # Get the dimensions of the image
+            img_height, img_width = self.image.shape
+
+            # Determine the slice boundaries for the original image
+            # and the insertion points in new_arr
+
+            # X-direction (columns)
+            if xshift > 0:
+                # We want the right portion of the original image
+                # and place it starting from xshift in new_arr
+                src_x_slice = slice(0, img_width - xshift)
+                dest_x_slice = slice(xshift, img_width)
+            elif xshift < 0:
+                # We want the left portion of the original image
+                # and place it ending at img_width + xshift in new_arr
+                src_x_slice = slice(-xshift, img_width)
+                dest_x_slice = slice(0, img_width + xshift)
+            else: # xshift == 0
+                src_x_slice = slice(0, img_width)
+                dest_x_slice = slice(0, img_width)
+
+            # Y-direction (rows)
+            if yshift > 0:
+                # We want the bottom portion of the original image
+                # and place it starting from yshift in new_arr
+                src_y_slice = slice(0, img_height - yshift)
+                dest_y_slice = slice(yshift, img_height)
+            elif yshift < 0:
+                # We want the top portion of the original image
+                # and place it ending at img_height + yshift in new_arr
+                src_y_slice = slice(-yshift, img_height)
+                dest_y_slice = slice(0, img_height + yshift)
+            else: # yshift == 0
+                src_y_slice = slice(0, img_height)
+                dest_y_slice = slice(0, img_height)
+
+            # Extract the relevant part from the original image
+            sliced_portion = self.image[src_y_slice, src_x_slice]
+
+            # Insert the sliced portion into new_arr at the shifted position
+            new_arr[dest_y_slice, dest_x_slice] = sliced_portion
+
+            self.image = new_arr # Update self.image with the new, cropped array
+            return self.image
+
     def proj_and_imag(self, **kwargs):
         """Projects the synthetic dataset and applies image zoom and shift
 
@@ -331,8 +388,18 @@ class SyntheticImage(ABC):
             self.image = self.zoom_out(self.image, self.zoom)
 
         if self.image_shift:
-            self.image = np.roll(self.image, (self.image_shift[0],
-                                              self.image_shift[1]), axis=(1, 0))
+            processor1 = self.ImageProcessor(self.image, (self.image_shift[0], self.image_shift[1])) # Shift right by 2, down by 1
+            self.image = processor1.roll_and_crop()
+
+            # new_arr = np.ones_like(self.image) * self.image.min()
+
+            # xshift = self.image_shift[0]
+            # yshift = self.image_shift[1]
+            # self.image = np.roll(self.image, (self.image_shift[0],
+            #                                   self.image_shift[1]), axis=(1, 0))
+            # if xshift > 0:
+            #     self.image = self.image[xshift::, :]
+
 
         # Fill background
         self.bkg_fill = kwargs.get('bkg_fill', None)
