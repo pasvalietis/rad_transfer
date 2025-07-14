@@ -213,18 +213,20 @@ class SyntheticImage(ABC):
         :rtype: tuple (int , int)
         """
 
-        self.zoom = kwargs.get('zoom', None)
+        self.zoom = kwargs.get('zoom', self.scale_factor())
 
         # Synthetic Foot Midpoint (0,0,0 in code_units)
         north_q = unyt_array(self.northvector, self.data.units.code_length)
         norm_q = unyt_array(self.normvector, self.data.units.code_length)
 
         ds_orientation = Orientation(norm_q, north_vector=north_q)
+
         # NOTE synth origin needs to be provided by user
-        synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
+        origin = kwargs.get('origin', [0,0,0])
+        synthbox_origin = unyt_array(origin, self.data.units.code_length)
+        
         synth_fpt_2d = st.coord_projection(self.data, synthbox_origin, ds_orientation)
         synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.box)
-        #synth_fpt_asec = st.code_coords_to_arcsec2(code_coord, self.ref_img, shift, self.zoom) #NOTE Toggling old and new methods
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
@@ -335,6 +337,29 @@ class SyntheticImage(ABC):
         # Fill background
         self.bkg_fill = kwargs.get('bkg_fill', None)
         if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
+
+    def scale_factor(self):
+        """
+        This function will determine a scale factor to use with zoom_out method based on
+        the ratio between the provided observable window scale and the scale of the 
+        3D dataset.
+        """
+
+        # Base calculations off of x-dimension
+        img_pix = self.ref_img.dimensions[0]    # Number of pixels across
+        img_scale = self.ref_img.scale[0]       # Number of arcseconds per pixel
+        img_as = img_pix * img_scale            # Number of arcseconds across
+
+        synth_lu = self.data.length_unit            # Data length unit
+        synth_dw = self.data.domain_width[0].value  # Data domain width
+        synth_ludw = synth_lu * synth_dw            # Length of domain (should be km)
+        synth_ludw = synth_ludw.to('km')            # Ensure length in km
+
+        synth_as = synth_ludw / (737)           # Assumption 737 km/as for solar feature
+        
+        factor = float(synth_as / img_as)
+
+        return factor
 
     def zoom_out(self, img, scale):
         """Move the virtual observer away from from the projected dataset
