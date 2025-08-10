@@ -93,18 +93,10 @@ class SyntheticImage(ABC):
 
         # Calculation of the CLB loop properties, including the normvector and northvector
         # used to align the MHD box
-        # self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-        # self.loop_coords = st.get_loop_coords(self.dims)
-        # self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
-
+        self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
         self.loop_coords = st.get_loop_coords(self.dims)
-
-        if 'normvector' in kwargs and 'northvector' in kwargs:
-            self.normvector, self.northvector = kwargs['normvector'], kwargs['northvector']
-        else:
-            self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-            self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
-
+        self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
+        
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
                               'north_vector': self.northvector}
