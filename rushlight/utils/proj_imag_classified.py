@@ -221,7 +221,6 @@ class SyntheticImage(ABC):
 
         ds_orientation = Orientation(norm_q, north_vector=north_q)
 
-        # NOTE synth origin needs to be provided by user
         origin = kwargs.get('origin', [0,0,0])
         synthbox_origin = unyt_array(origin, self.data.units.code_length)
         
@@ -363,16 +362,27 @@ class SyntheticImage(ABC):
 
         self.make_filter_image_field()  # Create emission fields
 
-        # NOTE Why is center position offset by 0.5 in y axis? This is dataset-dependent
-        prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+        # prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+        #     self.box,
+        #     self.box.domain_center.value, # center position in code units
+        #     normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
+        #     width=self.data.domain_width[0].value,  # width in code units
+        #     resolution=self.plot_settings['resolution'],  # image resolution
+        #     item=self.imag_field,  # respective field that is being projected
+        #     north_vector=self.view_settings['north_vector'],
+        #     depth = kwargs.get('depth', None)
+        #     )
+        
+        prji = yt.off_axis_projection(
             self.box,
-            # [0.0, 0.5, 0.0],  # center position in code units
-            self.box.domain_center.value,
+            self.box.domain_center.value, # center position in code units
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
-            width=self.data.domain_width[0].value,  # width in code units
+            width= kwargs.get('prjw', self.data.domain_width[0].value),  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
             item=self.imag_field,  # respective field that is being projected
-            north_vector=self.view_settings['north_vector'])
+            north_vector=self.view_settings['north_vector'],
+            # depth = kwargs.get('depth', None)
+            )
 
         # transpose synthetic image (swap axes for imshow)
         self.image = np.array(prji).T
@@ -390,16 +400,6 @@ class SyntheticImage(ABC):
         if self.image_shift:
             processor1 = self.ImageProcessor(self.image, (self.image_shift[0], self.image_shift[1])) # Shift right by 2, down by 1
             self.image = processor1.roll_and_crop()
-
-            # new_arr = np.ones_like(self.image) * self.image.min()
-
-            # xshift = self.image_shift[0]
-            # yshift = self.image_shift[1]
-            # self.image = np.roll(self.image, (self.image_shift[0],
-            #                                   self.image_shift[1]), axis=(1, 0))
-            # if xshift > 0:
-            #     self.image = self.image[xshift::, :]
-
 
         # Fill background
         self.bkg_fill = kwargs.get('bkg_fill', None)
@@ -554,7 +554,7 @@ class SyntheticImage(ABC):
 
         return map_ypoints_coords
 
-    def update_dir(self, norm: unyt_array=None, north: unyt_array=None):
+    def update_dir(self, norm: unyt_array=None, north: unyt_array=None, **kwargs):
         """Updates the normal and north vectors for the view settings and regenerates the image.
 
         :param norm: The new normal vector. If not provided, the current normal vector is retained.
@@ -576,8 +576,8 @@ class SyntheticImage(ABC):
             # Update view settings with new vectors
             self.view_settings = {'normal_vector': self.normvector,
                                   'north_vector': self.northvector}
-            self.proj_and_imag()  # Re-project the image with new settings
-            self.make_synthetic_map()  # Recreate the synthetic map
+            self.proj_and_imag(**kwargs)  # Re-project the image with new settings
+            self.make_synthetic_map(**kwargs)  # Recreate the synthetic map
 
         return norm, north  # Return the updated vectors
 
@@ -834,7 +834,7 @@ class ReferenceImage(ABC, MapFactory):
             import datetime
 
             # Create an empty dataset
-            resolution = 1000
+            resolution = kwargs.get('resolution', 1000)
             # data = np.full((resolution, resolution), np.random.randint(100))
             data = np.random.randint(0, 1e6, size=(resolution, resolution)) 
 
@@ -844,7 +844,7 @@ class ReferenceImage(ABC, MapFactory):
                                 observer='earth', frame=frames.Helioprojective)
             # Scale set to the following for solar limb to be in the field of view
             # scale = 220 # Changes bounds of the resulting helioprojective view
-            scale = kwargs.get('refmap_scale', 1)
+            scale = kwargs.get('scale', 1)
             
             instr = kwargs.get('instrument', 'DefaultInstrument')
             self.instrument = instr
