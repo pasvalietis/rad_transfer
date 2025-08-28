@@ -23,6 +23,8 @@ Nox documentation: https://nox.thea.codes
 
 import nox
 
+nox.options.default_venv_backend = "uv|virtualenv"
+
 
 @nox.session(python=["3.12", "3.13"])
 def tests(session):
