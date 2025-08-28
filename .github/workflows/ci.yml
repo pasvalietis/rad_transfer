@@ -1,6 +1,6 @@
-# This file invokes Nox sessions to run tests, build documentation, and
-# perform other continuous integration (CI) checks. The Nox sessions are
-# defined in noxfile.py.
+# This file invokes Nox sessions to run tests and perform other
+# continuous integration (CI) checks. The Nox sessions are defined in
+# noxfile.py.
 
 name: CI
 
