@@ -21,3 +21,8 @@ optional-dependencies.tests = [
   "nox[uv]>=2025.5.1",
   "pytest>=8.4.1",
 ]
+
+optional-dependencies.docs = [
+  "nox[uv]>=2025.5.1",
+  "sphinx>=8.2.3"
+]
