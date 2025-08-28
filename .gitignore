@@ -6,3 +6,6 @@ conf.ini
 *.iml
 *.pyc
 *.jpg
+.nox
+build
+*.egg-info
