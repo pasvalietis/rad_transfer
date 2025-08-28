@@ -7,3 +7,5 @@ conf.ini
 *.pyc
 *.jpg
 .nox
+build
+*.egg-info
