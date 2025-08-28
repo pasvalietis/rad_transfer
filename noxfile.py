@@ -20,3 +20,11 @@ To list available sessions, run `nox -l`.
 
 Nox documentation: https://nox.thea.codes
 """
+
+import nox
+
+
+@nox.session(python=[3.12, 3.13])
+def tests(session):
+    session.install(".", "pytest")
+    session.run("pytest")
