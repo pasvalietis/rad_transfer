@@ -6,6 +6,8 @@ requires = ["setuptools",
 
 build-backend = 'setuptools.build_meta'
 
+requires-python = ">=3.12"
+
 depdendencies = [
   "astropy>=6.1",
   "matplotlib>=3.8",
