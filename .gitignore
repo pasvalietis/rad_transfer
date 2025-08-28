@@ -6,3 +6,4 @@ conf.ini
 *.iml
 *.pyc
 *.jpg
+.nox
