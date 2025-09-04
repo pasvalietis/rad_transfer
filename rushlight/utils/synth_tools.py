@@ -18,11 +18,8 @@ from yt.utilities.orientation import Orientation
 
 ###############################################################
 
-def calc_vect(loop_coords: np.ndarray, ref_img: astropy.nddata.NDData, **kwargs):
-    """Calculates the north and normal vectors for the synthetic image
-
-    #NOTE Change to accept 3 coordinates: of fpt1, of fpt2, and of loop apex
-    
+def calc_vect(ref_img: astropy.nddata.NDData, vector_arr: np.ndarray = None, loop_coords: np.ndarray = None, **kwargs):
+    """Calculates the north and normal vectors for the synthetic image    
 
     :param loop_coords: Coordinates of the CLB loop as an array of
                         `astropy.coordinates.SkyCoord` objects.
@@ -57,17 +54,30 @@ def calc_vect(loop_coords: np.ndarray, ref_img: astropy.nddata.NDData, **kwargs)
         y-axis of the MHD frame, which can be useful for specific alignment purposes.
     """
 
-    v1 = np.array([loop_coords[0].x.value, 
-                loop_coords[0].y.value,
-                loop_coords[0].z.value])
-    
-    v2 = np.array([loop_coords[-1].x.value, 
-                loop_coords[-1].y.value,
-                loop_coords[-1].z.value])
-    
-    v3 = np.array([loop_coords[int(loop_coords.shape[0]/2.)].x.value, 
-                loop_coords[int(loop_coords.shape[0]/2.)].y.value,
-                loop_coords[int(loop_coords.shape[0]/2.)].z.value])
+    # Retrieve vectors that will define projection plane from either CLB loop_coords object, 
+    # or from user-defined cartesian vectors (Heliocentric)
+    if loop_coords:
+        try:
+            v1 = np.array([loop_coords[0].x.value, 
+                        loop_coords[0].y.value,
+                        loop_coords[0].z.value])
+            v2 = np.array([loop_coords[-1].x.value, 
+                        loop_coords[-1].y.value,
+                        loop_coords[-1].z.value])
+            v3 = np.array([loop_coords[int(loop_coords.shape[0]/2.)].x.value, 
+                        loop_coords[int(loop_coords.shape[0]/2.)].y.value,
+                        loop_coords[int(loop_coords.shape[0]/2.)].z.value])
+        except:
+            raise("loop_coords parameter is not properly formatted. Try regenerating from CLB.")
+    elif vector_arr:
+        v1 = np.array(vector_arr[0])
+        v2 = np.array(vector_arr[1])
+        v3 = np.array(vector_arr[2])
+
+        if (len(v1) != 3) or (len(v2) != 3) or (len(v3) != 3):
+            raise("Vectors not all 3D. Please check for x, y and z components.")
+    else:
+        raise("No valid definition of projection plane provided. Please either define loop_coords or vector_arr.")
 
     # Inter-FootPoint distance
     v_12 = v1-v2  # x-direction in mhd frame
@@ -347,15 +357,20 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     # NOTE Add an exception for center property (center / domain center)
     # NOTE Take into account scaling of bbox?
     # NOTE subtracting anything from y_code_coord needs to be in code_units!
-    x_asec = center_x + (resolution[0] * u.pix * scale[0]) * (x_code_coord - box.domain_center.value[0])
+
+    try:
+        center = box.domain_center.value
+    except:
+        center = box.center
+
+    x_asec = center_x + (resolution[0] * u.pix * scale[0]) * (x_code_coord - center[0])
     # x_asec = center_x + resolution[0] * scale[0] * (x_code_coord - 0.5) * u.pix
     # y_asec = center_y + resolution[1] * scale[1] * y_code_coord * u.pix
     # y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - 0.5)
-    y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - box.domain_center.value[1])
+    y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - center[1])
 
-    print(box.domain_center.value[0])
-    print(box.domain_center.value[1])
-
+    print(center[0])
+    print(center[1])
 
     asec_coords = SkyCoord(x_asec, y_asec, frame=frame) #(x_asec, y_asec)
 

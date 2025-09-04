@@ -40,14 +40,7 @@ from unyt import unyt_array
 from dataclasses import dataclass
 from abc import ABC
 
-###############################################################
-# Filter Images Classes
-
-#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
-# so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
-# Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
-# IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
-# Or just inherit from SyntheticFilterImage (?)
+# TODO - create a method summary here
 
 @dataclass
 class SyntheticImage(ABC):
@@ -68,13 +61,6 @@ class SyntheticImage(ABC):
         :raises Exception: _description_
         """        
 
-        # Attributes properties of the synthetic loop to the Synthetic Object 
-        self.radius, self.majax, self.minax, self.height, self.phi0, \
-        self.theta0, self.el, self.az, self.samples_num, self.lat, self.lon \
-        = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        self.dims = {}
-        self.set_loop_params(**kwargs)
-
         # Initializes self.ref_img as either a provided sunpy map
         # or as a generated default map
         self.ref_img = st.get_reference_image(smap_path, smap, **kwargs)
@@ -91,11 +77,33 @@ class SyntheticImage(ABC):
             self.channel = 193 # Exception for STEREO not having 193 channel
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
 
-        # Calculation of the CLB loop properties, including the normvector and northvector
-        # used to align the MHD box
-        self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-        self.loop_coords = st.get_loop_coords(self.dims)
-        self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
+        # Determine whether the user has chosen to define their projection plane via
+        # Vector array or CLB loop parameters
+        self.vector_arr = kwargs.get('vector_arr', None) 
+        loop_params = kwargs.get('pkl', None)
+        self.loop_coords = None
+
+        if self.vector_arr:
+            self.lat = kwargs.get('lat', 0) * u.deg
+            self.lon = kwargs.get('lon', 0) * u.deg
+        elif loop_params:
+            # Attributes properties of the synthetic loop to the Synthetic Object 
+            self.radius, self.majax, self.minax, self.height, self.phi0, \
+            self.theta0, self.el, self.az, self.samples_num \
+            = (0, 0, 0, 0, 0, 0, 0, 0, 0)
+            self.dims = {}
+            self.set_loop_params(**kwargs)
+
+            # Establish aliases for lat, lon coordinates
+            self.lat = self.theta0
+            self.lon = self.phi0
+
+            # Calculation of the CLB loop properties, including the normvector and northvector
+            # used to align the MHD box
+            self.loop_coords = st.get_loop_coords(self.dims)
+
+        self.ifpd, self.normvector, self.northvector = (None, None, None)
+        self.normvector, self.northvector, self.ifpd = st.calc_vect(self.ref_img, vector_arr=self.vector_arr, loop_coords=self.loop_coords, default=False)
         
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
@@ -201,10 +209,6 @@ class SyntheticImage(ABC):
         self.az = self.dims['az']
         self.samples_num = self.dims['samples_num']
 
-        # Establish aliases for lat, lon coordinates
-        self.lat = self.theta0
-        self.lon = self.phi0
-
     def diff_roll(self, **kwargs):
         """Calculate amount to shift image by difference between observed foot midpoint
         and selected "shift origin"
@@ -226,7 +230,7 @@ class SyntheticImage(ABC):
         
         synth_fpt_2d = st.coord_projection(self.data, synthbox_origin, ds_orientation)
         synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.box)
-        ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
+        self.ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
             # Find coordinates of bottom left corner of "zoom area"
@@ -252,8 +256,8 @@ class SyntheticImage(ABC):
         x1 = float(mpt_pix[0])
         y1 = float(mpt_pix[1])
         # Shift and scale the synthetic coords by zoom
-        x2 = float(ori_pix[0]*self.zoom + startx)
-        y2 = float(ori_pix[1]*self.zoom + starty)
+        x2 = float(self.ori_pix[0]*self.zoom + startx)
+        y2 = float(self.ori_pix[1]*self.zoom + starty)
 
         x = int((x1-x2))
         y = int((y1-y2))
@@ -373,9 +377,14 @@ class SyntheticImage(ABC):
         #     depth = kwargs.get('depth', None)
         #     )
         
+        try:
+            center = self.box.domain_center.value
+        except:
+            center = self.box.center
+
         prji = yt.off_axis_projection(
             self.box,
-            self.box.domain_center.value, # center position in code units
+            center, # center position in code units
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
             width= kwargs.get('prjw', self.data.domain_width[0].value),  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
@@ -838,7 +847,8 @@ class ReferenceImage(ABC, MapFactory):
             # data = np.full((resolution, resolution), np.random.randint(100))
             data = np.random.randint(0, 1e6, size=(resolution, resolution)) 
 
-            obstime = datetime.datetime(2000,1,1,0,0,0)
+            # obstime = datetime.datetime(2000,1,1,0,0,0)
+            obstime = datetime.datetime(2012,7,19,11,31,21)
             # Define a reference coordinate and create a header using sunpy.map.make_fitswcs_header
             skycoord = SkyCoord(0*u.arcsec, 0*u.arcsec, obstime=obstime,
                                 observer='earth', frame=frames.Helioprojective)
