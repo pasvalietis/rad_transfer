@@ -67,9 +67,9 @@ class SyntheticImage(ABC):
         :param smap: Sunpy map object of the reference map, defaults to None
         :type smap: sunpy.map.Map, optional
         :raises Exception: _description_
-        """        
+        """
 
-        # Attributes properties of the synthetic loop to the Synthetic Object 
+        # Attributes properties of the synthetic loop to the Synthetic Object
         self.radius, self.majax, self.minax, self.height, self.phi0, \
         self.theta0, self.el, self.az, self.samples_num, self.lat, self.lon \
         = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -94,10 +94,19 @@ class SyntheticImage(ABC):
 
         # Calculation of the CLB loop properties, including the normvector and northvector
         # used to align the MHD box
-        self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
+
+        #self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
+        #self.loop_coords = st.get_loop_coords(self.dims)
+        #self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
+
         self.loop_coords = st.get_loop_coords(self.dims)
-        self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
-        
+
+        if 'normvector' in kwargs and 'northvector' in kwargs:
+            self.normvector, self.northvector = kwargs['normvector'], kwargs['northvector']
+        else:
+            self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
+            self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
+
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
                               'north_vector': self.northvector}
@@ -117,15 +126,15 @@ class SyntheticImage(ABC):
         else:
             print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
-        
+
         # TODO Remove this part of code (Crops bottom slice of box out by default)
         center = [0.0, 0.5, 0.0]
-        left_edge = [-0.5, 0.016, -0.25]
+        left_edge = [-0.5, 0.005, -0.25]
         right_edge = [0.5, 1.0, 0.25]
         self.box = self.data.region(center=kwargs.get('center', center),
                                 left_edge=kwargs.get('left_edge', left_edge),
                                 right_edge=kwargs.get('right_edge', right_edge))
-        
+
         # Define self.domain_width for later reference
         self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
 
@@ -160,7 +169,7 @@ class SyntheticImage(ABC):
         self.proj_and_imag(**kwargs)
 
         self.make_synthetic_map(**kwargs)
-    
+
     def set_loop_params(self, **kwargs):
         '''
         Initializes the properties of the CLB loop required to position and orient the MHD cube.
@@ -226,7 +235,7 @@ class SyntheticImage(ABC):
         ds_orientation = Orientation(norm_q, north_vector=north_q)
         synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
         synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
+        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.data)
         ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
@@ -267,7 +276,7 @@ class SyntheticImage(ABC):
         self.image_shift = (x,y)
         self.start_pix = (startx, starty)
 
-    def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs): 
+    def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs):
         """Plot the generated synthetic map in different configurations
 
         :param fig: matplotlib figure object, defaults to None
@@ -283,12 +292,12 @@ class SyntheticImage(ABC):
         if fig:
             if plot == 'comp':
                 comp_map = sunpy.map.Map(self.ref_img, self.synth_map, composite=True)
-                
+
                 alpha = kwargs.get('alpha', 0.5)
                 comp_map.set_alpha(1, alpha)
                 ax = fig.add_subplot(projection=comp_map.get_map(0))
                 comp_map.plot(axes=ax)
-            elif plot == 'synth':                
+            elif plot == 'synth':
                 ax = fig.add_subplot(projection=self.synth_map)
                 ax.grid(False)
                 self.synth_map.plot(axes=ax)
@@ -342,7 +351,7 @@ class SyntheticImage(ABC):
         """Selects and applies the correct filter image field to the synthetic dataset
 
         :raises ValueError: Raised if filter instrument is unrecognized
-        :raises ValueError: Raised if AIA wavelength is not from valid selection 
+        :raises ValueError: Raised if AIA wavelength is not from valid selection
                             (1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335)
         """
 
@@ -354,10 +363,10 @@ class SyntheticImage(ABC):
             raise ValueError("instr should be in the instrument list: ", instr_list)
 
         if self.instr == 'xrt':
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
             cmap['xrt'] = color_tables.xrt_color_table()
         elif self.instr == 'aia':
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            imaging_model = uv.UVModel("temperature", "number_density", self.channel)
             try:
                 cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
             except ValueError:
@@ -472,7 +481,7 @@ class SyntheticImage(ABC):
 
         if self.poisson:
             self.image = 0.5*np.max(self.image) * random_noise(self.image / (0.5*np.max(self.image)), mode='poisson')
-        
+
         # Creating header using sunpy
         header = make_fitswcs_header(self.image,
                                      coordinate=self.reference_coord,
@@ -547,7 +556,7 @@ class SyntheticImage(ABC):
         :type orientation: Orientation, optional
         :return: Cooordinates of the projected point from the viewing camera perspective
         :rtype: tuple
-        """     
+        """
 
         # coord_copy should be a unyt array in code_units
         coord_copy = coord
@@ -568,8 +577,8 @@ class SyntheticImage(ABC):
                 unit_vectors = orientation.unit_vectors
 
         # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
-        y = np.dot(coord_vectors, unit_vectors[1]) + self.data.domain_center.value[1]
-        x = np.dot(coord_vectors, unit_vectors[0])  # * self.data.domain_center.uq
+        y = np.dot(coord_vectors.value, unit_vectors[1].value) + self.data.domain_center.value[1]
+        x = np.dot(coord_vectors.value, unit_vectors[0].value)  # * self.data.domain_center.uq
 
         ret_coord = (x, y) # (y, x)
 
@@ -588,8 +597,8 @@ class SyntheticImage(ABC):
         synthobj = {event_key: event_dict}
 
         return synthobj
-    
-    def append_synthobj(self, target=None):    
+
+    def append_synthobj(self, target=None):
         if target:
             if isinstance(target, str):
                 with open(target, 'rb') as f:
@@ -738,23 +747,23 @@ class ReferenceImage(ABC, MapFactory):
         reference_image = None
 
         if ref_img_path:
-            m = sunpy.map.Map(ref_img_path) 
-        else: 
+            m = sunpy.map.Map(ref_img_path)
+        else:
             import datetime
 
             # Create an empty dataset
-            resolution = 1000
+            resolution = 194
             # data = np.full((resolution, resolution), np.random.randint(100))
-            data = np.random.randint(0, 1e6, size=(resolution, resolution)) 
+            data = np.random.randint(0, 1e6, size=(resolution, resolution))
 
-            obstime = datetime.datetime(2000,1,1,0,0,0)
+            obstime = datetime.datetime(2000, 1, 1, 0, 0, 0)
             # Define a reference coordinate and create a header using sunpy.map.make_fitswcs_header
             skycoord = SkyCoord(0*u.arcsec, 0*u.arcsec, obstime=obstime,
                                 observer='earth', frame=frames.Helioprojective)
             # Scale set to the following for solar limb to be in the field of view
             # scale = 220 # Changes bounds of the resulting helioprojective view
             scale = kwargs.get('refmap_scale', 1)
-            
+
             instr = kwargs.get('instrument', 'DefaultInstrument')
             self.instrument = instr
 
@@ -770,7 +779,7 @@ class ReferenceImage(ABC, MapFactory):
 
             header = make_fitswcs_header(data, skycoord, **header_kwargs)
             default_kwargs = {'data': data, 'header': header}
-            m = sunpy.map.Map(data, header)        
+            m = sunpy.map.Map(data, header)
 
         self.map = m
 
