@@ -2,10 +2,12 @@
 # This script holds the up-to-date versions of all image projection algorithms, made accessible
 # through rushlight class objects
 
+from datetime import datetime
 import numpy as np
 from scipy import ndimage
 
 import yt
+from yt.data_objects.selection_objects.region import YTRegion
 from yt.utilities.orientation import Orientation
 yt.set_log_level(50)
 
@@ -26,29 +28,19 @@ from sunpy.coordinates import frames
 from sunpy.map.header_helper import make_fitswcs_header
 from sunpy.coordinates.sun import _radius_from_angular_radius
 
-from astropy.coordinates import SkyCoord, CartesianRepresentation
+from astropy.coordinates import SkyCoord
 from astropy.time import Time, TimeDelta
 import astropy.constants as const
 
 import pickle
 import textwrap
 import os
-import sys
-sys.path.insert(1, config.CLB_PATH)
-from CoronalLoopBuilder.builder import semi_circle_loop # type: ignore
 from unyt import unyt_array
 
 from dataclasses import dataclass
 from abc import ABC
 
-###############################################################
-# Filter Images Classes
-
-#TODO: Write a parent class for Synthetic images that both SyntheticBandImage and SyntheticFilterImage can inherit from,
-# so you don't need to describe the same input parameters, such as *dataset*, or *view_settings* and avoid code repetition.
-# Get back to this when you will start working on nonthermal emission models, and further on gyrosynchrotron.
-# IMPORTANT: proj_and_imag can be inherited from this parent class as well, however exact methods are to be redefined
-# Or just inherit from SyntheticFilterImage (?)
+# TODO - create a method summary here
 
 @dataclass
 class SyntheticImage(ABC):
@@ -69,13 +61,6 @@ class SyntheticImage(ABC):
         :raises Exception: _description_
         """
 
-        # Attributes properties of the synthetic loop to the Synthetic Object
-        self.radius, self.majax, self.minax, self.height, self.phi0, \
-        self.theta0, self.el, self.az, self.samples_num, self.lat, self.lon \
-        = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        self.dims = {}
-        self.set_loop_params(**kwargs)
-
         # Initializes self.ref_img as either a provided sunpy map
         # or as a generated default map
         self.ref_img = st.get_reference_image(smap_path, smap, **kwargs)
@@ -92,21 +77,38 @@ class SyntheticImage(ABC):
             self.channel = 193 # Exception for STEREO not having 193 channel
         self.obs = kwargs.get('obs', "DefaultInstrument")  # Name of the observatory
 
-        # Calculation of the CLB loop properties, including the normvector and northvector
-        # used to align the MHD box
+        # Determine whether the user has chosen to define their projection plane via
+        # Vector array or CLB loop parameters
+        self.vector_arr = kwargs.get('vector_arr', None)
+        loop_params = kwargs.get('pkl', None)
+        self.loop_coords = None
 
-        #self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-        #self.loop_coords = st.get_loop_coords(self.dims)
-        #self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
+        if self.vector_arr:
+            self.lat = kwargs.get('lat', 0) * u.deg
+            self.lon = kwargs.get('lon', 0) * u.deg
+        elif loop_params:
+            # Attributes properties of the synthetic loop to the Synthetic Object
+            self.radius, self.majax, self.minax, self.height, self.phi0, \
+            self.theta0, self.el, self.az, self.samples_num \
+            = (0, 0, 0, 0, 0, 0, 0, 0, 0)
+            self.dims = {}
+            self.set_loop_params(**kwargs)
 
-        self.loop_coords = st.get_loop_coords(self.dims)
+            # Establish aliases for lat, lon coordinates
+            self.lat = self.theta0
+            self.lon = self.phi0
+
+            # Calculation of the CLB loop properties, including the normvector and northvector
+            # used to align the MHD box
+            self.loop_coords = st.get_loop_coords(self.dims)
+
+        self.ifpd, self.normvector, self.northvector = (None, None, None)
 
         if 'normvector' in kwargs and 'northvector' in kwargs:
             self.normvector, self.northvector = kwargs['normvector'], kwargs['northvector']
         else:
             self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
-            self.normvector, self.northvector, self.ifpd = st.calc_vect(self.loop_coords, self.ref_img, default=False)
-
+            self.normvector, self.northvector, self.ifpd = st.calc_vect(self.ref_img, vector_arr=self.vector_arr, loop_coords=self.loop_coords, default=False)
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
                               'north_vector': self.northvector}
@@ -114,29 +116,27 @@ class SyntheticImage(ABC):
         # Initialize the 3D MHD file to be used for synthetic image
         shen_datacube = config.SIMULATIONS['DATASET']   # Default datacube TODO make this generic
         if dataset:
-            if isinstance(dataset, str):
-                    self.data = yt.load(dataset)
+            if isinstance(dataset, YTRegion):
+                self.box = dataset
+                self.data = self.box.ds
+                self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
             else:
-                try:
-                    dataset.field_list
-                    self.data = dataset
-                except:
-                    print('Invalid datacube provided! Using default datacube... \n')
-                    self.data = yt.load(shen_datacube)
+                if isinstance(dataset, str):
+                    self.data = yt.load(dataset)
+                    self.box = self.data
+                else:
+                    try:
+                        dataset.field_list
+                        self.data = dataset
+                        self.box = self.data
+                    except:
+                        print('Invalid datacube provided! Using default datacube... \n')
+                        self.data = yt.load(shen_datacube)
+                        self.box = self.data
+                self.domain_width = np.abs(self.data.domain_right_edge - self.data.domain_left_edge).in_units('cm').to_astropy()
         else:
             print('No datacube provided! Using default datacube... \n')
             self.data = yt.load(shen_datacube)
-
-        # TODO Remove this part of code (Crops bottom slice of box out by default)
-        center = [0.0, 0.5, 0.0]
-        left_edge = [-0.5, 0.005, -0.25]
-        right_edge = [0.5, 1.0, 0.25]
-        self.box = self.data.region(center=kwargs.get('center', center),
-                                left_edge=kwargs.get('left_edge', left_edge),
-                                right_edge=kwargs.get('right_edge', right_edge))
-
-        # Define self.domain_width for later reference
-        self.domain_width = np.abs(self.box.right_edge - self.box.left_edge).in_units('cm').to_astropy()
 
         # Determine synthetic observation time with respect to observation time
         self.timescale = kwargs.get('timescale', 109.8)
@@ -150,8 +150,8 @@ class SyntheticImage(ABC):
         # to align MHD origin with loop foot midpoint. Additionally, determines
         # the lower left pixel of the synthetic image, relative to the lower left pixel
         # of the ref_image.
-        self.zoom, self.image_shift = (None, None)
-        self.diff_roll(**kwargs)
+        # self.zoom, self.image_shift = (None, None)
+        # self.diff_roll(**kwargs)
 
         # Aesthetic settings for the creation of the synthetic image
         self.plot_settings = {'resolution': self.ref_img.data.shape[0],
@@ -165,9 +165,8 @@ class SyntheticImage(ABC):
                               'label': None}
 
 
-        self.__imag_field, self.image = (None, None)
+        self.imag_field, self.image = (None, None)
         self.proj_and_imag(**kwargs)
-
         self.make_synthetic_map(**kwargs)
 
     def set_loop_params(self, **kwargs):
@@ -214,10 +213,6 @@ class SyntheticImage(ABC):
         self.az = self.dims['az']
         self.samples_num = self.dims['samples_num']
 
-        # Establish aliases for lat, lon coordinates
-        self.lat = self.theta0
-        self.lon = self.phi0
-
     def diff_roll(self, **kwargs):
         """Calculate amount to shift image by difference between observed foot midpoint
         and selected "shift origin"
@@ -226,17 +221,20 @@ class SyntheticImage(ABC):
         :rtype: tuple (int , int)
         """
 
-        self.zoom = kwargs.get('zoom', None)
+        self.zoom = kwargs.get('zoom', self.scale_factor())
 
         # Synthetic Foot Midpoint (0,0,0 in code_units)
         north_q = unyt_array(self.northvector, self.data.units.code_length)
         norm_q = unyt_array(self.normvector, self.data.units.code_length)
 
         ds_orientation = Orientation(norm_q, north_vector=north_q)
-        synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
-        synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.data)
-        ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
+
+        origin = kwargs.get('origin', [0,0,0])
+        synthbox_origin = unyt_array(origin, self.data.units.code_length)
+
+        synth_fpt_2d = st.coord_projection(self.data, synthbox_origin, ds_orientation)
+        synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.box)
+        self.ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
 
         if self.zoom and self.zoom < 1:
             # Find coordinates of bottom left corner of "zoom area"
@@ -262,8 +260,8 @@ class SyntheticImage(ABC):
         x1 = float(mpt_pix[0])
         y1 = float(mpt_pix[1])
         # Shift and scale the synthetic coords by zoom
-        x2 = float(ori_pix[0]*self.zoom + startx)
-        y2 = float(ori_pix[1]*self.zoom + starty)
+        x2 = float(self.ori_pix[0]*self.zoom + startx)
+        y2 = float(self.ori_pix[1]*self.zoom + starty)
 
         x = int((x1-x2))
         y = int((y1-y2))
@@ -276,82 +274,11 @@ class SyntheticImage(ABC):
         self.image_shift = (x,y)
         self.start_pix = (startx, starty)
 
-    def synthmap_plot(self, fig: plt.figure=None, plot: str=None, **kwargs):
-        """Plot the generated synthetic map in different configurations
-
-        :param fig: matplotlib figure object, defaults to None
-        :type fig: plt.figure, optional
-        :param plot: Hint for what type of plot to produce ['comp', 'synth', 'obs'], defaults to None
-        :type plot: str, optional
-        :return: Synthetic map object, normvector, northvector, and image shift
-        :rtype: tuple
-        """
-        self.synth_map.plot_settings['norm'] = colors.LogNorm(0.1, self.ref_img.max())
-        self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
-
-        if fig:
-            if plot == 'comp':
-                comp_map = sunpy.map.Map(self.ref_img, self.synth_map, composite=True)
-
-                alpha = kwargs.get('alpha', 0.5)
-                comp_map.set_alpha(1, alpha)
-                ax = fig.add_subplot(projection=comp_map.get_map(0))
-                comp_map.plot(axes=ax)
-            elif plot == 'synth':
-                ax = fig.add_subplot(projection=self.synth_map)
-                ax.grid(False)
-                self.synth_map.plot(axes=ax)
-
-                debug = kwargs.get('debug', False)
-                if debug:
-                    # Plot Synthetic Footpont
-                    north_q = unyt_array(self.northvector, self.data.units.code_length)
-                    norm_q = unyt_array(self.normvector, self.data.units.code_length)
-                    ds_orientation = Orientation(norm_q, north_vector=north_q)
-
-                    synthbox_origin = unyt_array([0,0,0], self.data.units.code_length)
-                    synth_fpt_2d = self.coord_projection(synthbox_origin, ds_orientation)
-                    synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img)
-                    ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
-                    ax.plot(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'og')
-                    ax.text(ori_pix[0] * self.zoom, ori_pix[1] * self.zoom, 'origin', color='g')
-
-                    # Plot Observed Footpoint
-                    mpt = SkyCoord(lon=self.lon, lat=self.lat, radius=const.R_sun,
-                        frame='heliographic_stonyhurst',
-                        observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
-                    mpt_pix = self.ref_img.wcs.world_to_pixel(mpt)
-                    ax.plot(mpt_pix[0], mpt_pix[1], 'or')
-                    ax.text(mpt_pix[0], mpt_pix[1], 'midpoint', color='r')
-
-                    # Plot Sun center
-                    sc = SkyCoord(lon=0*u.deg, lat=0*u.deg, radius=1*u.cm,
-                        frame='heliographic_stonyhurst',
-                        observer='earth', obstime=self.obstime).transform_to(frame='helioprojective')
-                    sc_pix = self.ref_img.wcs.world_to_pixel(sc)
-                    ax.plot(sc_pix[0], sc_pix[1], 'oc')
-                    ax.text(sc_pix[0], sc_pix[1], 'sun center', color='c')
-
-                    # Plot (0,0) [correlates to bl of image]
-                    ax.plot(0,0,'oy')
-                    ax.text(0,0, 'bottom left', color='y')
-            elif plot == 'obs':
-                ax = fig.add_subplot(projection=self.ref_img)
-                self.ref_img.plot(axes=ax)
-            else:
-                ax = fig.add_subplot(projection=self.synth_map)
-
-            return ax, self.synth_map, self.normvector, self.northvector, self.image_shift
-
-        else:
-
-            return self.synth_map, self.normvector, self.northvector, self.image_shift
-
     def make_filter_image_field(self, **kwargs):
         """Selects and applies the correct filter image field to the synthetic dataset
 
         :raises ValueError: Raised if filter instrument is unrecognized
-        :raises ValueError: Raised if AIA wavelength is not from valid selection
+        :raises ValueError: Raised if AIA wavelength is not from valid selection 
                             (1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335)
         """
 
@@ -359,70 +286,163 @@ class SyntheticImage(ABC):
         imaging_model = None
         instr_list = ['xrt', 'aia', 'secchi', 'defaultinstrument']
 
-        if self.instr not in instr_list:
-            raise ValueError("instr should be in the instrument list: ", instr_list)
+        print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
+        self.instr = 'xrt'
+        imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
+        cmap['xrt'] = color_tables.xrt_color_table()
 
-        if self.instr == 'xrt':
-            imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
-            cmap['xrt'] = color_tables.xrt_color_table()
-        elif self.instr == 'aia':
-            imaging_model = uv.UVModel("temperature", "number_density", self.channel)
-            try:
-                cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
-            except ValueError:
-                raise ValueError("AIA wavelength should be one of the following:"
-                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
-        elif self.instr == 'secchi':
-            self.instr = 'aia'  # Band-aid for lack of different UV model
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
-            try:
-                cmap['aia'] = color_tables.euvi_color_table(int(self.channel) * u.angstrom)
-            except ValueError:
-                raise ValueError("AIA wavelength should be one of the following:"
-                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
-        elif self.instr == 'defaultinstrument':
-            print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
-            self.instr = 'xrt'
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
-            cmap['xrt'] = color_tables.xrt_color_table()
-
-        # Adds intensity fields to the self-contained dataset
         imaging_model.make_intensity_fields(self.data)
 
         field = str(self.instr) + '_filter_band'
-        self.__imag_field = field
+        self.imag_field = field
 
         if self.plot_settings:
             self.plot_settings['cmap'] = cmap[self.instr]
 
+    class ImageProcessor:
+        def __init__(self, image, image_shift):
+            self.image = image
+            self.image_shift = image_shift
+
+        def roll_and_crop(self):
+            # Create the new array filled with the minimum value of the original image
+            new_arr = np.ones_like(self.image) * self.image.min()
+
+            xshift = self.image_shift[0]
+            yshift = self.image_shift[1]
+
+            # Get the dimensions of the image
+            img_height, img_width = self.image.shape
+
+            # Determine the slice boundaries for the original image
+            # and the insertion points in new_arr
+
+            # X-direction (columns)
+            if xshift > 0:
+                # We want the right portion of the original image
+                # and place it starting from xshift in new_arr
+                src_x_slice = slice(0, img_width - xshift)
+                dest_x_slice = slice(xshift, img_width)
+            elif xshift < 0:
+                # We want the left portion of the original image
+                # and place it ending at img_width + xshift in new_arr
+                src_x_slice = slice(-xshift, img_width)
+                dest_x_slice = slice(0, img_width + xshift)
+            else: # xshift == 0
+                src_x_slice = slice(0, img_width)
+                dest_x_slice = slice(0, img_width)
+
+            # Y-direction (rows)
+            if yshift > 0:
+                # We want the bottom portion of the original image
+                # and place it starting from yshift in new_arr
+                src_y_slice = slice(0, img_height - yshift)
+                dest_y_slice = slice(yshift, img_height)
+            elif yshift < 0:
+                # We want the top portion of the original image
+                # and place it ending at img_height + yshift in new_arr
+                src_y_slice = slice(-yshift, img_height)
+                dest_y_slice = slice(0, img_height + yshift)
+            else: # yshift == 0
+                src_y_slice = slice(0, img_height)
+                dest_y_slice = slice(0, img_height)
+
+            # Extract the relevant part from the original image
+            sliced_portion = self.image[src_y_slice, src_x_slice]
+
+            # Insert the sliced portion into new_arr at the shifted position
+            new_arr[dest_y_slice, dest_x_slice] = sliced_portion
+
+            self.image = new_arr # Update self.image with the new, cropped array
+            return self.image
+
     def proj_and_imag(self, **kwargs):
-        """Projects the synthetic dataset and applies image zoom and shift"""
+        """Projects the synthetic dataset and applies image zoom and shift
+
+        :param bkg_fill: Value to fill the background (where image values are less than or equal to 0).
+            If None, the background is not filled.
+        :type bkg_fill: float, optional
+
+        :notes: The center position is offset by 0.5 in the y-axis, which is dataset-dependent.
+            Transposes the synthetic image to swap axes for `imshow`.
+            If `self.zoom` is set and not equal to 1, the image is zoomed out.
+            If `self.image_shift` is set, the image is shifted by the specified amounts
+            along the y and x axes, respectively.
+        """
 
         self.make_filter_image_field()  # Create emission fields
 
-        prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+        # prji = yt.visualization.volume_rendering.off_axis_projection.off_axis_projection(
+        #     self.box,
+        #     self.box.domain_center.value, # center position in code units
+        #     normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
+        #     width=self.data.domain_width[0].value,  # width in code units
+        #     resolution=self.plot_settings['resolution'],  # image resolution
+        #     item=self.imag_field,  # respective field that is being projected
+        #     north_vector=self.view_settings['north_vector'],
+        #     depth = kwargs.get('depth', None)
+        #     )
+
+        try:
+            center = self.box.domain_center.value
+        except:
+            center = self.box.center
+
+        prji = yt.off_axis_projection(
             self.box,
-            [0.0, 0.5, 0.0],  # center position in code units
+            center, # center position in code units
             normal_vector=self.view_settings['normal_vector'],  # normal vector (z axis)
-            width=self.data.domain_width[0].value,  # width in code units
+            width= kwargs.get('prjw', self.data.domain_width[0].value),  # width in code units
             resolution=self.plot_settings['resolution'],  # image resolution
-            item=self.__imag_field,  # respective field that is being projected
-            north_vector=self.view_settings['north_vector'])
+            item=self.imag_field,  # respective field that is being projected
+            north_vector=self.view_settings['north_vector'],
+            # depth = kwargs.get('depth', None)
+            )
 
         # transpose synthetic image (swap axes for imshow)
         self.image = np.array(prji).T
 
+        # Determines the number of pixels required to shift the synthetic image
+        # to align MHD origin with loop foot midpoint. Additionally, determines
+        # the lower left pixel of the synthetic image, relative to the lower left pixel
+        # of the ref_image.
+        self.zoom, self.image_shift = (None, None)
+        self.diff_roll(**kwargs)
+
         if self.zoom and not (self.zoom == 1):
             self.image = self.zoom_out(self.image, self.zoom)
 
-        # return self.image
         if self.image_shift:
-            self.image = np.roll(self.image, (self.image_shift[0],
-                                              self.image_shift[1]), axis=(1, 0))
+            processor1 = self.ImageProcessor(self.image, (self.image_shift[0], self.image_shift[1])) # Shift right by 2, down by 1
+            self.image = processor1.roll_and_crop()
 
         # Fill background
         self.bkg_fill = kwargs.get('bkg_fill', None)
         if self.bkg_fill: self.image[self.image <= 0] = self.bkg_fill
+
+    def scale_factor(self):
+        """
+        This function will determine a scale factor to use with zoom_out method based on
+        the ratio between the provided observable window scale and the scale of the
+        3D dataset.
+        """
+
+        # Base calculations off of x-dimension
+        img_pix = self.ref_img.dimensions[0]    # Number of pixels across
+        img_scale = self.ref_img.scale[0]       # Number of arcseconds per pixel
+        img_as = img_pix * img_scale            # Number of arcseconds across
+
+        synth_lu = self.data.length_unit            # Data length unit
+        synth_dw = self.data.domain_width[0].value  # Data domain width
+        synth_ludw = synth_lu * synth_dw            # Length of domain (should be km)
+        synth_ludw = synth_ludw.to('km')            # Ensure length in km
+
+        synth_as = synth_ludw / (737)           # Assumption 737 km/as for solar feature
+        #TODO: Use observer distance to convert arcseconds to kilonmeters
+
+        factor = float(synth_as / img_as)
+
+        return factor
 
     def zoom_out(self, img, scale):
         """Move the virtual observer away from from the projected dataset
@@ -481,7 +501,7 @@ class SyntheticImage(ABC):
 
         if self.poisson:
             self.image = 0.5*np.max(self.image) * random_noise(self.image / (0.5*np.max(self.image)), mode='poisson')
-
+        
         # Creating header using sunpy
         header = make_fitswcs_header(self.image,
                                      coordinate=self.reference_coord,
@@ -496,6 +516,9 @@ class SyntheticImage(ABC):
                                      unit=self.unit)
 
         self.synth_map = sunpy.map.Map(self.image, header)
+
+        self.synth_map.plot_settings['norm'] = colors.LogNorm(0.1, self.ref_img.max())
+        self.synth_map.plot_settings['cmap'] = self.plot_settings['cmap']
 
         return self.synth_map
 
@@ -524,7 +547,7 @@ class SyntheticImage(ABC):
 
         map_ypoints_coords = []
         for ypt in y_points['coordinates']:
-            ypt_2d_code = self.coord_projection(ypt, ds_orientation)
+            ypt_2d_code = st.coord_projection(self.data, ypt, ds_orientation)
             ypt_2d_asec = st.code_coords_to_arcsec(ypt_2d_code, self.ref_img)
             ypt_coord_pix = self.ref_img.wcs.world_to_pixel(ypt_2d_asec)
 
@@ -547,97 +570,124 @@ class SyntheticImage(ABC):
 
         return map_ypoints_coords
 
-    def coord_projection(self, coord: unyt_array, orientation: Orientation=None, **kwargs):
-        """Reproduces yt plot_modifications _project_coords functionality
+    def update_dir(self, norm: unyt_array=None, north: unyt_array=None, **kwargs):
+        """Updates the normal and north vectors for the view settings and regenerates the image.
 
-        :param coord: Coordinates of the point in the datacube domain
-        :type coord: unyt_array
-        :param orientation: Orientation object calculated from norm / north vector, defaults to None
-        :type orientation: Orientation, optional
-        :return: Cooordinates of the projected point from the viewing camera perspective
-        :rtype: tuple
+        :param norm: The new normal vector. If not provided, the current normal vector is retained.
+        :type norm: unyt_array, optional
+        :param north: The new north vector. If not provided, the current north vector is retained.
+        :type north: unyt_array, optional
+        :returns: A tuple containing the updated normal vector and north vector.
+        :rtype: tuple[unyt_array, unyt_array]
         """
 
-        # coord_copy should be a unyt array in code_units
-        coord_copy = coord
-        coord_vectors = coord_copy.transpose() - (self.data.domain_center.v * self.data.domain_center.uq)
+        change = False  # Initialize a flag to track if changes occurred
+        if not np.array_equal(norm, self.normvector):
+            self.normvector = norm  # Update the normal vector
+            change = True  # Set change flag to True
+        if not np.array_equal(north, self.northvector):
+            self.northvector = north  # Update the north vector
+            change = True  # Set change flag to True
+        if change:
+            # Update view settings with new vectors
+            self.view_settings = {'normal_vector': self.normvector,
+                                  'north_vector': self.northvector}
+            self.proj_and_imag(**kwargs)  # Re-project the image with new settings
+            self.make_synthetic_map(**kwargs)  # Recreate the synthetic map
 
-        # orientation object is computed from norm and north vectors
-        if orientation:
-            unit_vectors = orientation.unit_vectors
-        else:
-            if 'norm_vector' in kwargs:
-                norm_vector = kwargs['norm_vector']
-                norm_vec = unyt_array(norm_vector) * self.data.domain_center.uq
-            if 'north_vector' in kwargs:
-                north_vector = kwargs['north_vector']
-                north_vec = unyt_array(north_vector) * self.data.domain_center.uq
-            if 'north_vector' and 'norm_vector' in kwargs:
-                orientation = Orientation(norm_vec, north_vector=north_vec)
-                unit_vectors = orientation.unit_vectors
-
-        # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
-        y = np.dot(coord_vectors.value, unit_vectors[1].value) + self.data.domain_center.value[1]
-        x = np.dot(coord_vectors.value, unit_vectors[0].value)  # * self.data.domain_center.uq
-
-        ret_coord = (x, y) # (y, x)
-
-        return ret_coord
+        return norm, north  # Return the updated vectors
 
     def save_synthobj(self):
-        event_dict = {}
-        event_dict['header'] = self.ref_img.fits_header
-        event_dict['loop_params'] = self.dims
-        event_dict['norm_vector'] = self.normvector
-        event_dict['norm_vector'] = self.northvector
+        """Saves relevant synthetic object parameters into a dictionary.
 
-        telescope = event_dict['header']['TELESCOP']
-        dateobs = event_dict['header']['DATE-OBS']
-        event_key = f'{telescope}|{dateobs}'
-        synthobj = {event_key: event_dict}
+        This method compiles key information about the synthetic object, including FITS header data
+        from the reference image, loop parameters, and view vectors, into a dictionary.
+        This dictionary is structured for easy identification using a key composed of the
+        telescope and observation date.
 
-        return synthobj
+        :returns: A dictionary containing the synthetic object's data,
+            keyed by a string combining the telescope and observation date.
+        :rtype: dict
+        """
+        event_dict = {}  # Initialize an empty dictionary to store event-related data
+        event_dict['header'] = self.ref_img.fits_header  # Store the FITS header from the reference image
+        event_dict['loop_params'] = self.dims  # Store the loop parameters (dimensions)
+        event_dict['norm_vector'] = self.normvector  # Store the normal vector
+        event_dict['north_vector'] = self.northvector  # Store the north vector
+
+        telescope = event_dict['header']['TELESCOP']  # Extract the telescope name from the FITS header
+        dateobs = event_dict['header']['DATE-OBS']  # Extract the observation date from the FITS header
+        event_key = f'{telescope}|{dateobs}'  # Create a unique key for the event
+        synthobj = {event_key: event_dict}  # Create the final dictionary with the event key and data
+
+        return synthobj  # Return the structured synthetic object dictionary
 
     def append_synthobj(self, target=None):
+        """Appends the current synthetic object's data to an existing dictionary or a new one,
+        then saves it to a file if a file path is provided or creates a new file.
+
+        :param target: The target to append to. Can be a file path (str) to a pickled dictionary,
+            an existing dictionary (dir), or None to start with an empty dictionary.
+        :type target: str or dict, optional
+        :returns: A tuple containing the updated synthetic object dictionary and the target file path.
+        :rtype: tuple[dict, str]
+        :raises TypeError: If `target` is not a string, a dictionary, or None.
+        """
+
+        synthobj = {}  # Initialize an empty dictionary for the synthetic object data
+
+        # Load existing data if a target is provided
         if target:
             if isinstance(target, str):
-                with open(target, 'rb') as f:
-                    synthobj = pickle.load(f)
-                    f.close()
-            elif isinstance(target, dir):
+                # If target is a string, assume it's a file path and load the pickled dictionary
+                try:
+                    with open(target, 'rb') as f:
+                        synthobj = pickle.load(f)
+                except FileNotFoundError:
+                    print(f"File not found: {target}. Creating a new dictionary.")
+                    synthobj = {}
+                except Exception as e:
+                    print(f"Error loading pickle file: {e}. Creating an empty dictionary.")
+                    synthobj = {}
+            elif isinstance(target, dict):
+                # If target is already a dictionary, use it directly
                 synthobj = target
             else:
-                print('Invalid target! Creating empty dict...\n')
+                # Handle invalid target types
+                print('Invalid target type! Creating an empty dictionary.')
                 synthobj = {}
         else:
-            print('No target! Creating empty dict...\n')
+            # If no target is provided, start with an empty dictionary
+            print('No target provided! Creating an empty dictionary.')
             synthobj = {}
 
-        # Appends this sfi object's information to the provided dictionary
+        # Get the current synthetic object's information
         this_synthobj = self.save_synthobj()
+        # Extract the key and value from the current synthetic object's data
         key = list(this_synthobj.keys())[0]
         value = this_synthobj[key]
+        # Append or update the synthetic object dictionary with the current object's data
         synthobj[key] = value
 
+        # Save the updated synthetic object dictionary
         if isinstance(target, str):
+            # If the original target was a string (file path), save back to that file
             with open(target, 'wb') as file:
                 pickle.dump(synthobj, file)
-                file.close()
         else:
-            import datetime
-            now = datetime.datetime.now()
-
-            loop_dir = './loop_parameters/'
+            # If no file path was provided initially, create a new one in 'loop_parameters/'
+            now = datetime.datetime.now()  # Get current timestamp
+            loop_dir = './loop_parameters/'  # Define the directory for saving
             if not os.path.exists(loop_dir):
-                os.makedirs(loop_dir)
+                os.makedirs(loop_dir)  # Create the directory if it doesn't exist
 
-            fname = f'{now}.pkl'.replace(' ', '_')
-            target = f'{loop_dir}{fname}'
+            # Generate a unique filename using the timestamp
+            fname = f'{now}.pkl'.replace(' ', '_').replace(':', '-').replace('.', '_')
+            target = f'{loop_dir}{fname}'  # Construct the full file path
             with open(target, 'wb') as file:
                 pickle.dump(synthobj, file)
-                file.close()
 
-        return synthobj, target
+        return synthobj, target  # Return the updated dictionary and the final target path
 
     def __str__(self):
         return f"{self._text_summary()}\n{self.data.__repr__()}"
@@ -660,6 +710,54 @@ class SyntheticFilterImage(SyntheticImage):
     """ For UV and Soft Xrays """
     def __init__(self, dataset=None, smap_path: str=None, smap=None, **kwargs):
         super().__init__(dataset, smap_path, smap, **kwargs)
+
+    def make_filter_image_field(self):
+        """Selects and applies the correct filter image field to the synthetic dataset
+
+        :raises ValueError: Raised if filter instrument is unrecognized
+        :raises ValueError: Raised if AIA wavelength is not from valid selection
+                            (1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335)
+        """
+
+        cmap = {}
+        imaging_model = None
+        instr_list = ['xrt', 'aia', 'secchi', 'defaultinstrument']
+
+        if self.instr not in instr_list:
+            raise ValueError("instr should be in the instrument list: ", instr_list)
+
+        if self.instr == 'xrt':
+            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            cmap['xrt'] = color_tables.xrt_color_table()
+        elif self.instr == 'aia':
+            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            try:
+                cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
+            except ValueError:
+                raise ValueError("AIA wavelength should be one of the following:"
+                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+        elif self.instr == 'secchi':
+            self.instr = 'aia'  # Band-aid for lack of different UV model
+            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            try:
+                cmap['aia'] = color_tables.euvi_color_table(int(self.channel) * u.angstrom)
+            except ValueError:
+                raise ValueError("AIA wavelength should be one of the following:"
+                                 "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
+        elif self.instr == 'defaultinstrument':
+            print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
+            self.instr = 'xrt'
+            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            cmap['xrt'] = color_tables.xrt_color_table()
+
+        # Adds intensity fields to the self-contained dataset
+        imaging_model.make_intensity_fields(self.data)
+
+        field = str(self.instr) + '_filter_band'
+        self.imag_field = field
+
+        if self.plot_settings:
+            self.plot_settings['cmap'] = cmap[self.instr]
 
 @dataclass
 class SyntheticEnergyRangeImage(SyntheticImage):
@@ -709,7 +807,7 @@ class SyntheticBandImage():
 
         self.view_settings = {'normal_vector': (0.0, 0.0, 1.0),  # pass vectors as mutable arguments
                               'north_vector': (-0.7, -0.3, 0.0)}
-        self.__imag_field = None
+        self.imag_field = None
         self.image = None
 
         if self.box:
@@ -727,7 +825,7 @@ class SyntheticBandImage():
 
         imaging_model.make_intensity_fields(self.data)
         field = 'xray_' + str(self.emin) + '_' + str(self.emax) + '_keV_band'
-        self.__imag_field = field
+        self.imag_field = field
 
 ###############################################
 # Reference Image Classes
@@ -762,8 +860,8 @@ class ReferenceImage(ABC, MapFactory):
                                 observer='earth', frame=frames.Helioprojective)
             # Scale set to the following for solar limb to be in the field of view
             # scale = 220 # Changes bounds of the resulting helioprojective view
-            scale = kwargs.get('refmap_scale', 1)
-
+            scale = kwargs.get('scale', 1)
+            
             instr = kwargs.get('instrument', 'DefaultInstrument')
             self.instrument = instr
 

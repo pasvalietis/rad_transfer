@@ -1,23 +1,25 @@
 import numpy as np
 
 from rushlight.config import config
-
 import sys
 sys.path.insert(1, config.CLB_PATH)
 from CoronalLoopBuilder.builder import semi_circle_loop # type: ignore
 
 import pickle
+import sunpy
+from unyt import unyt_array
+import numpy as np
 
 import astropy
 from astropy.coordinates import SkyCoord, CartesianRepresentation
 import astropy.units as u
 
-import sunpy
+from yt.utilities.orientation import Orientation
 
-from unyt import unyt_array
+###############################################################
 
-def calc_vect(loop_coords: np.ndarray, ref_img: astropy.nddata.NDData, **kwargs):
-    """Calculates the north and normal vectors for the synthetic image
+def calc_vect(ref_img: astropy.nddata.NDData, vector_arr: np.ndarray = None, loop_coords: np.ndarray = None, **kwargs):
+    """Calculates the north and normal vectors for the synthetic image    
 
     :param loop_coords: Coordinates of the CLB loop as an array of
                         `astropy.coordinates.SkyCoord` objects.
@@ -52,17 +54,30 @@ def calc_vect(loop_coords: np.ndarray, ref_img: astropy.nddata.NDData, **kwargs)
         y-axis of the MHD frame, which can be useful for specific alignment purposes.
     """
 
-    v1 = np.array([loop_coords[0].x.value, 
-                loop_coords[0].y.value,
-                loop_coords[0].z.value])
-    
-    v2 = np.array([loop_coords[-1].x.value, 
-                loop_coords[-1].y.value,
-                loop_coords[-1].z.value])
-    
-    v3 = np.array([loop_coords[int(loop_coords.shape[0]/2.)].x.value, 
-                loop_coords[int(loop_coords.shape[0]/2.)].y.value,
-                loop_coords[int(loop_coords.shape[0]/2.)].z.value])
+    # Retrieve vectors that will define projection plane from either CLB loop_coords object, 
+    # or from user-defined cartesian vectors (Heliocentric)
+    if loop_coords:
+        try:
+            v1 = np.array([loop_coords[0].x.value, 
+                        loop_coords[0].y.value,
+                        loop_coords[0].z.value])
+            v2 = np.array([loop_coords[-1].x.value, 
+                        loop_coords[-1].y.value,
+                        loop_coords[-1].z.value])
+            v3 = np.array([loop_coords[int(loop_coords.shape[0]/2.)].x.value, 
+                        loop_coords[int(loop_coords.shape[0]/2.)].y.value,
+                        loop_coords[int(loop_coords.shape[0]/2.)].z.value])
+        except:
+            raise("loop_coords parameter is not properly formatted. Try regenerating from CLB.")
+    elif vector_arr:
+        v1 = np.array(vector_arr[0])
+        v2 = np.array(vector_arr[1])
+        v3 = np.array(vector_arr[2])
+
+        if (len(v1) != 3) or (len(v2) != 3) or (len(v3) != 3):
+            raise("Vectors not all 3D. Please check for x, y and z components.")
+    else:
+        raise("No valid definition of projection plane provided. Please either define loop_coords or vector_arr.")
 
     # Inter-FootPoint distance
     v_12 = v1-v2  # x-direction in mhd frame
@@ -260,6 +275,8 @@ def get_loop_params(loop_params, **kwargs):
             'samples_num':  samples_num
         }
 
+    
+
     return loop_params_dict
 
 def get_reference_image(smap_path: str = None, smap=None, **kwargs):
@@ -312,7 +329,7 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     reference image observer. Assumes that x axis extents in code units are [-.5 to .5] 
     and y axis is changing from 0 to 1.
 
-    :param code_coord: Requested 3D coordinates within datacube object
+    :param code_coord: Projected 2D coordinates of synthetic footpoint
     :type code_coord: unyt_array
     :param smap: Sunpy map object
     :type smap: astropy.nddata.NDData
@@ -322,20 +339,82 @@ def code_coords_to_arcsec(code_coord: unyt_array, ref_img: astropy.nddata.NDData
     if ref_img == None:
         ref_img = get_reference_image()
 
+    # Take the center coordinates of the base image in arcseconds
     center_x = kwargs.get('center_x', ref_img.center.Tx)
     center_y = kwargs.get('center_y', ref_img.center.Ty)
 
+    # Take the resolution, scale, and coordinate frame from the base image
+    # NOTE: Synthetic Image and Reference Image scales should be identical at this point
     resolution = kwargs.get('resolution', ref_img.data.shape)
     scale = kwargs.get('scale', ref_img.scale)
     frame = kwargs.get('frame', ref_img.coordinate_frame)
 
+    # Store the code coordinate units for the anchor point of the image
+    # (Should be the foot midpoint) Must be normalized!
     x_code_coord, y_code_coord = code_coord[0], code_coord[1]
 
-    x_asec = center_x + resolution[0] * scale[0] * x_code_coord * u.pix
-    y_asec = center_y + resolution[1] * scale[1] * (y_code_coord - 0.5) * u.pix
+    box = kwargs.get('box')
+    # NOTE Add an exception for center property (center / domain center)
+    # NOTE Take into account scaling of bbox?
+    # NOTE subtracting anything from y_code_coord needs to be in code_units!
+
+    try:
+        center = box.domain_center.value
+    except:
+        center = box.center
+
+    x_asec = center_x + (resolution[0] * u.pix * scale[0]) * (x_code_coord - center[0])
+    # x_asec = center_x + resolution[0] * scale[0] * (x_code_coord - 0.5) * u.pix
+    # y_asec = center_y + resolution[1] * scale[1] * y_code_coord * u.pix
+    # y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - 0.5)
+    y_asec = center_y + (resolution[1] * u.pix * scale[1]) * (y_code_coord - center[1])
+
+    print(center[0])
+    print(center[1])
 
     asec_coords = SkyCoord(x_asec, y_asec, frame=frame) #(x_asec, y_asec)
 
     return asec_coords
+
+def coord_projection(data, coord: unyt_array, orientation: Orientation=None, **kwargs):
+        """Reproduces yt plot_modifications _project_coords functionality
+
+        :param coord: Coordinates of the point in the datacube domain
+        :type coord: unyt_array
+        :param orientation: Orientation object calculated from norm / north vector, defaults to None
+        :type orientation: Orientation, optional
+        :return: Cooordinates of the projected point from the viewing camera perspective
+        :rtype: tuple
+        """     
+
+        # coord_copy should be a unyt array in code_units
+        # NOTE coord_copy.transpose() seems to do nothing to coord copy [Generic Dataset]
+        # Also, domain_center.v = [0,0,0], so adding does nothing
+        coord_copy = coord
+        coord_vectors = coord_copy.transpose() - (data.domain_center.v * data.domain_center.uq)
+
+        # orientation object is computed from norm and north vectors
+        if orientation:
+            unit_vectors = orientation.unit_vectors
+        else:
+            if 'norm_vector' in kwargs:
+                norm_vector = kwargs['norm_vector']
+                norm_vec = unyt_array(norm_vector) * data.domain_center.uq
+            if 'north_vector' in kwargs:
+                north_vector = kwargs['north_vector']
+                north_vec = unyt_array(north_vector) * data.domain_center.uq
+            if 'north_vector' and 'norm_vector' in kwargs:
+                orientation = Orientation(norm_vec, north_vector=north_vec)
+                unit_vectors = orientation.unit_vectors
+
+        # NOTE if self.data.domain_center is [0,0,0], then this does nothing
+        # Default image extents [-0.5:0.5, 0:1] imposes vertical shift
+        y = np.dot(coord_vectors, unit_vectors[1]) + data.domain_center.value[1]
+        x = np.dot(coord_vectors, unit_vectors[0])  # data.domain_center.uq
+
+        ret_coord = (x, y) # (y, x)
+
+        return ret_coord
+
 
 
