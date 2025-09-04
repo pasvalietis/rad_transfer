@@ -143,7 +143,7 @@ def synthmap_plot(params_path: str, smap_path: str=None, smap: sunpy.map.Map=Non
     # factor 10 to convert timestep to slice number
 
     start_time = Time(ref_img.reference_coordinate.obstime, scale='utc', format='isot')
-    synth_obs_time = start_time #+ timediff
+    synth_obs_time = start_time + timediff
     
     print('obstime:', synth_obs_time)
 
