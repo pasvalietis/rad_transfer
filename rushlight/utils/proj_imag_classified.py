@@ -59,7 +59,7 @@ class SyntheticImage(ABC):
         :param smap: Sunpy map object of the reference map, defaults to None
         :type smap: sunpy.map.Map, optional
         :raises Exception: _description_
-        """        
+        """
 
         # Initializes self.ref_img as either a provided sunpy map
         # or as a generated default map
@@ -79,7 +79,7 @@ class SyntheticImage(ABC):
 
         # Determine whether the user has chosen to define their projection plane via
         # Vector array or CLB loop parameters
-        self.vector_arr = kwargs.get('vector_arr', None) 
+        self.vector_arr = kwargs.get('vector_arr', None)
         loop_params = kwargs.get('pkl', None)
         self.loop_coords = None
 
@@ -87,7 +87,7 @@ class SyntheticImage(ABC):
             self.lat = kwargs.get('lat', 0) * u.deg
             self.lon = kwargs.get('lon', 0) * u.deg
         elif loop_params:
-            # Attributes properties of the synthetic loop to the Synthetic Object 
+            # Attributes properties of the synthetic loop to the Synthetic Object
             self.radius, self.majax, self.minax, self.height, self.phi0, \
             self.theta0, self.el, self.az, self.samples_num \
             = (0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -103,8 +103,12 @@ class SyntheticImage(ABC):
             self.loop_coords = st.get_loop_coords(self.dims)
 
         self.ifpd, self.normvector, self.northvector = (None, None, None)
-        self.normvector, self.northvector, self.ifpd = st.calc_vect(self.ref_img, vector_arr=self.vector_arr, loop_coords=self.loop_coords, default=False)
-        
+
+        if 'normvector' in kwargs and 'northvector' in kwargs:
+            self.normvector, self.northvector = kwargs['normvector'], kwargs['northvector']
+        else:
+            self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
+            self.normvector, self.northvector, self.ifpd = st.calc_vect(self.ref_img, vector_arr=self.vector_arr, loop_coords=self.loop_coords, default=False)
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
                               'north_vector': self.northvector}
@@ -164,7 +168,7 @@ class SyntheticImage(ABC):
         self.imag_field, self.image = (None, None)
         self.proj_and_imag(**kwargs)
         self.make_synthetic_map(**kwargs)
-    
+
     def set_loop_params(self, **kwargs):
         '''
         Initializes the properties of the CLB loop required to position and orient the MHD cube.
@@ -227,7 +231,7 @@ class SyntheticImage(ABC):
 
         origin = kwargs.get('origin', [0,0,0])
         synthbox_origin = unyt_array(origin, self.data.units.code_length)
-        
+
         synth_fpt_2d = st.coord_projection(self.data, synthbox_origin, ds_orientation)
         synth_fpt_asec = st.code_coords_to_arcsec(synth_fpt_2d, self.ref_img, box=self.box)
         self.ori_pix = self.ref_img.wcs.world_to_pixel(synth_fpt_asec)
@@ -279,10 +283,12 @@ class SyntheticImage(ABC):
         """
 
         cmap = {}
+        imaging_model = None
+        instr_list = ['xrt', 'aia', 'secchi', 'defaultinstrument']
 
         print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
         self.instr = 'xrt'
-        imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+        imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
         cmap['xrt'] = color_tables.xrt_color_table()
 
         imaging_model.make_intensity_fields(self.data)
@@ -376,7 +382,7 @@ class SyntheticImage(ABC):
         #     north_vector=self.view_settings['north_vector'],
         #     depth = kwargs.get('depth', None)
         #     )
-        
+
         try:
             center = self.box.domain_center.value
         except:
@@ -417,7 +423,7 @@ class SyntheticImage(ABC):
     def scale_factor(self):
         """
         This function will determine a scale factor to use with zoom_out method based on
-        the ratio between the provided observable window scale and the scale of the 
+        the ratio between the provided observable window scale and the scale of the
         3D dataset.
         """
 
@@ -432,7 +438,8 @@ class SyntheticImage(ABC):
         synth_ludw = synth_ludw.to('km')            # Ensure length in km
 
         synth_as = synth_ludw / (737)           # Assumption 737 km/as for solar feature
-        
+        #TODO: Use observer distance to convert arcseconds to kilonmeters
+
         factor = float(synth_as / img_as)
 
         return factor
@@ -573,7 +580,7 @@ class SyntheticImage(ABC):
         :returns: A tuple containing the updated normal vector and north vector.
         :rtype: tuple[unyt_array, unyt_array]
         """
-        
+
         change = False  # Initialize a flag to track if changes occurred
         if not np.array_equal(norm, self.normvector):
             self.normvector = norm  # Update the normal vector
@@ -606,7 +613,7 @@ class SyntheticImage(ABC):
         event_dict['header'] = self.ref_img.fits_header  # Store the FITS header from the reference image
         event_dict['loop_params'] = self.dims  # Store the loop parameters (dimensions)
         event_dict['norm_vector'] = self.normvector  # Store the normal vector
-        event_dict['north_vector'] = self.northvector  # Store the north vector 
+        event_dict['north_vector'] = self.northvector  # Store the north vector
 
         telescope = event_dict['header']['TELESCOP']  # Extract the telescope name from the FITS header
         dateobs = event_dict['header']['DATE-OBS']  # Extract the observation date from the FITS header
@@ -614,7 +621,7 @@ class SyntheticImage(ABC):
         synthobj = {event_key: event_dict}  # Create the final dictionary with the event key and data
 
         return synthobj  # Return the structured synthetic object dictionary
-    
+
     def append_synthobj(self, target=None):
         """Appends the current synthetic object's data to an existing dictionary or a new one,
         then saves it to a file if a file path is provided or creates a new file.
@@ -626,7 +633,7 @@ class SyntheticImage(ABC):
         :rtype: tuple[dict, str]
         :raises TypeError: If `target` is not a string, a dictionary, or None.
         """
-        
+
         synthobj = {}  # Initialize an empty dictionary for the synthetic object data
 
         # Load existing data if a target is provided
@@ -708,7 +715,7 @@ class SyntheticFilterImage(SyntheticImage):
         """Selects and applies the correct filter image field to the synthetic dataset
 
         :raises ValueError: Raised if filter instrument is unrecognized
-        :raises ValueError: Raised if AIA wavelength is not from valid selection 
+        :raises ValueError: Raised if AIA wavelength is not from valid selection
                             (1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335)
         """
 
@@ -838,17 +845,16 @@ class ReferenceImage(ABC, MapFactory):
         reference_image = None
 
         if ref_img_path:
-            m = sunpy.map.Map(ref_img_path) 
-        else: 
+            m = sunpy.map.Map(ref_img_path)
+        else:
             import datetime
 
             # Create an empty dataset
-            resolution = kwargs.get('resolution', 1000)
+            resolution = 194
             # data = np.full((resolution, resolution), np.random.randint(100))
-            data = np.random.randint(0, 1e6, size=(resolution, resolution)) 
+            data = np.random.randint(0, 1e6, size=(resolution, resolution))
 
-            # obstime = datetime.datetime(2000,1,1,0,0,0)
-            obstime = datetime.datetime(2012,7,19,11,31,21)
+            obstime = datetime.datetime(2000, 1, 1, 0, 0, 0)
             # Define a reference coordinate and create a header using sunpy.map.make_fitswcs_header
             skycoord = SkyCoord(0*u.arcsec, 0*u.arcsec, obstime=obstime,
                                 observer='earth', frame=frames.Helioprojective)
@@ -871,7 +877,7 @@ class ReferenceImage(ABC, MapFactory):
 
             header = make_fitswcs_header(data, skycoord, **header_kwargs)
             default_kwargs = {'data': data, 'header': header}
-            m = sunpy.map.Map(data, header)        
+            m = sunpy.map.Map(data, header)
 
         self.map = m
 
