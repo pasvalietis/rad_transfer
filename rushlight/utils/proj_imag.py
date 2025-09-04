@@ -90,10 +90,10 @@ class SyntheticFilterImage():
             raise ValueError("instr should be in the instrument list: ", instr_list)
 
         if self.instr == 'xrt':
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
             #cmap['xrt'] = color_tables.xrt_color_table()
         if self.instr == 'aia':
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            imaging_model = uv.UVModel("temperature", "number_density", self.channel)
             # try:
             #     #cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
             # except ValueError:
