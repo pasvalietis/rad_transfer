@@ -28,6 +28,7 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
     'nbsphinx',
+    'sphinx_rtd_theme',
 ]
 
 templates_path = ['_templates']
@@ -37,6 +38,6 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "classic"
+html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
 html_logo = "_static/rushlight_logo_cr.png"
