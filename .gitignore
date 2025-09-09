@@ -6,3 +6,15 @@ conf.ini
 *.iml
 *.pyc
 *.jpg
+*.ipynb
+rushlight/examples/images/L1_XRT20120719_113821.1.fits
+rushlight/examples/loops/back_2012_center.pkl
+docs/build/*
+/rushlight/user_notebooks/export
+/rushlight/user_notebooks/fido_results
+/rushlight/user_notebooks/loop_parameters
+/rushlight/user_notebooks/stereo_1040
+/rushlight/user_notebooks/slits
+/rushlight/user_notebooks/observations_cropped
+/rushlight/user_notebooks/observations
+/rushlight/user_notebooks/loop_params
