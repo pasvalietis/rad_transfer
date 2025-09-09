@@ -107,7 +107,7 @@ class SyntheticImage(ABC):
         if 'normvector' in kwargs and 'northvector' in kwargs:
             self.normvector, self.northvector = kwargs['normvector'], kwargs['northvector']
         else:
-            self.loop_coords, self.ifpd, self.normvector, self.northvector = (None, None, None, None)
+            self.ifpd, self.normvector, self.northvector = (None, None, None)
             self.normvector, self.northvector, self.ifpd = st.calc_vect(self.ref_img, vector_arr=self.vector_arr, loop_coords=self.loop_coords, default=False)
         # Group the normal and north vectors in self.view_settings
         self.view_settings = {'normal_vector': self.normvector,
