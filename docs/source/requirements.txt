@@ -19,7 +19,6 @@ PyYAML>=6.0.1
 PyYAML>=6.0.2
 scipy>=1.16.1
 setuptools>=69.0.3
-skimage>=0.0
 sunkit_pyvista>=0.3.0
 sunpy>=5.0.1
 unyt>=2.9.5
