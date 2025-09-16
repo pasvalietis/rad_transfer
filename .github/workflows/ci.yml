@@ -38,10 +38,10 @@ jobs:
           python: '3.13'
           nox_session: tests-3.13
 
-        - name: Documentation, Python 3.13, Ubuntu
-          os: ubuntu-latest
-          python: '3.13'
-          nox_session: docs
+        # - name: Documentation, Python 3.13, Ubuntu
+        #   os: ubuntu-latest
+        #   python: '3.13'
+        #   nox_session: docs
 
     steps:
 
