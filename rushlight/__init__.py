@@ -10,4 +10,4 @@ except PackageNotFoundError:
     pass
 
 # Make an implicit call to config to ensure directories are established
-from rushlight import config
+# from rushlight import config
