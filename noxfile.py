@@ -28,5 +28,5 @@ nox.options.default_venv_backend = "uv|virtualenv"
 
 @nox.session(python=["3.12", "3.13"])
 def tests(session):
-    session.install(".", "pytest", "numpy")
+    session.install(".", "pytest", "numpy", "scipy", "astropy", "yt", "sunpy", "scikit-image", "reproject>=0.12.0", "mpl-animators>=1.2.0")
     session.run("pytest", "tests", "--tb=short")
