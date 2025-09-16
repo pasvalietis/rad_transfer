@@ -9,6 +9,7 @@ on:
     branches:
     - master
     - main
+    - 'test-infrastructure'
   pull_request:
   workflow_dispatch:
 
