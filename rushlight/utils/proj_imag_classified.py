@@ -727,10 +727,10 @@ class SyntheticFilterImage(SyntheticImage):
             raise ValueError("instr should be in the instrument list: ", instr_list)
 
         if self.instr == 'xrt':
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
             cmap['xrt'] = color_tables.xrt_color_table()
         elif self.instr == 'aia':
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            imaging_model = uv.UVModel("temperature", "number_density", self.channel)
             try:
                 cmap['aia'] = color_tables.aia_color_table(int(self.channel) * u.angstrom)
             except ValueError:
@@ -738,7 +738,7 @@ class SyntheticFilterImage(SyntheticImage):
                                  "1600, 1700, 4500, 94, 131, 171, 193, 211, 304, 335.")
         elif self.instr == 'secchi':
             self.instr = 'aia'  # Band-aid for lack of different UV model
-            imaging_model = uv.UVModel("temperature", "density", self.channel)
+            imaging_model = uv.UVModel("temperature", "number_density", self.channel)
             try:
                 cmap['aia'] = color_tables.euvi_color_table(int(self.channel) * u.angstrom)
             except ValueError:
@@ -747,7 +747,7 @@ class SyntheticFilterImage(SyntheticImage):
         elif self.instr == 'defaultinstrument':
             print('DefaultInstrument used... Generating xrt intensity_field; self.instr = \'xrt\' \n')
             self.instr = 'xrt'
-            imaging_model = xrt.XRTModel("temperature", "density", self.channel)
+            imaging_model = xrt.XRTModel("temperature", "number_density", self.channel)
             cmap['xrt'] = color_tables.xrt_color_table()
 
         # Adds intensity fields to the self-contained dataset
