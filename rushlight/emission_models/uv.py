@@ -10,7 +10,6 @@ from astropy import units as u
 from yt.fields.particle_fields import obtain_relative_velocity_vector
 from yt.fields.vector_operations import get_bulk
 
-from rushlight.config import config
         
 class UVModel:
     """
@@ -81,7 +80,9 @@ class UVModel:
         numpy.ndarray
             An array containing the calculated UV intensity for each cell in the chunk.
         """
-        trm_path = config.INSTRUMENTS['SDO_AIA_TEMP_RESPONSE']
+        # trm_path = config.INSTRUMENTS['SDO_AIA_TEMP_RESPONSE']
+        # Use relative path within the repository
+        trm_path = '../instr/sdo_aia/aia_temp_response.npy'
         aia_trm = np.load(trm_path, allow_pickle=True)
 
         channels = {'94': 0, '131': 1, '171': 2, '193': 3, '211': 4, '335': 5}

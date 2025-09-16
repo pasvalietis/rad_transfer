@@ -11,7 +11,7 @@ from yt.data_objects.selection_objects.region import YTRegion
 from yt.utilities.orientation import Orientation
 yt.set_log_level(50)
 
-from rushlight.config import config
+# from rushlight.config import config
 from rushlight.emission_models import uv, xrt, xray_bremsstrahlung
 from rushlight.visualization.colormaps import color_tables
 from rushlight.utils import synth_tools as st
@@ -114,7 +114,10 @@ class SyntheticImage(ABC):
                               'north_vector': self.northvector}
 
         # Initialize the 3D MHD file to be used for synthetic image
-        shen_datacube = config.SIMULATIONS['DATASET']   # Default datacube TODO make this generic
+
+        test_box = None
+        # shen_datacube = config.SIMULATIONS['DATASET']   # Default datacube TODO make this generic
+
         if dataset:
             if isinstance(dataset, YTRegion):
                 self.box = dataset
@@ -131,12 +134,12 @@ class SyntheticImage(ABC):
                         self.box = self.data
                     except:
                         print('Invalid datacube provided! Using default datacube... \n')
-                        self.data = yt.load(shen_datacube)
+                        self.data = yt.load(test_box)
                         self.box = self.data
                 self.domain_width = np.abs(self.data.domain_right_edge - self.data.domain_left_edge).in_units('cm').to_astropy()
         else:
             print('No datacube provided! Using default datacube... \n')
-            self.data = yt.load(shen_datacube)
+            self.data = yt.load(test_box)
 
         # Determine synthetic observation time with respect to observation time
         self.timescale = kwargs.get('timescale', 109.8)

@@ -4,8 +4,6 @@ from yt.data_objects.static_output import Dataset
 
 from scipy import interpolate
 
-from rushlight.config import config
-
 '''
 Class to plot synthetic X-ray images as observed from Hinode XRT
 '''
@@ -79,7 +77,9 @@ class XRTModel:
         numpy.ndarray
             An array containing the calculated X-ray intensity for each cell in the chunk.
         """
-        trm_path = config.INSTRUMENTS['HINODE_XRT_TEMP_RESPONSE']
+        # trm_path = config.INSTRUMENTS['HINODE_XRT_TEMP_RESPONSE']
+        # Use relative path within the repository
+        trm_path = '../instr/hinode_xrt/xrt_temp_response.npy'
         xrt_trm = np.load(trm_path, allow_pickle=True)
 
         channel = self.channel
