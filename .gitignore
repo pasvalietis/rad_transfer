@@ -6,6 +6,10 @@ conf.ini
 *.iml
 *.pyc
 *.jpg
+*.ipynb
 .nox
 build
 *.egg-info
+*.fits
+*.pkl
+docs/build/*
