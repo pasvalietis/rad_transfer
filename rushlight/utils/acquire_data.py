@@ -26,6 +26,7 @@ def get_sdo_aia_data(start_time=Time('2011-03-07T18:06:04', scale='utc', format=
     :return:
     """
 
+    # JSOC database access
     if jsoc_email is None:
         jsoc_email = config['JSOC_EMAIL']
 
