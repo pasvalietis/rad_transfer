@@ -46,11 +46,27 @@ from abc import ABC
 class SyntheticImage(ABC):
 
     """
-    Parent class for generating synthetic images
+    ## Parent class for generating synthetic images using rad_transfer
+    
+    .. _reference:
+
+    Contains all of the base functionality necessary for:
+     * **Setting the positions** of the observer and of the feature, relative to the center of the sun
+     * **Orienting and projecting** a 3D dataset according to specified lines of sight
+     * **Generating synthetic brightness maps** based on the selected line of sight
+     * **Plotting arbitrary points** into the same projection plane
+
+    Child classes should mainly overload `make_filter_image_field` to use imaging models compatible with the intended
+    **observation wavelength**, as well as setting appropriate **colormap parameters**.
     """
 
     def __init__(self, dataset = None, smap_path: str=None, smap=None, **kwargs):
-        """Object to contain all of the elements of the synthetic image and simulated flare
+        """
+        ### Constructor for the synthetic image class. See :ref:`reference`
+        
+        Ensures that all necessary components are loaded / interpreted on call.
+        User should provide a 3D dataset and a synthetic map path / object, 
+        otherwise dummy datasets / synthetic maps will be created (see `ReferenceImage` class).
 
         :param dataset: Either PATH to the local simulated dataset or a loaded yt object
         :type dataset: _string, yt dataset
